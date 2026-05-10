@@ -9,11 +9,10 @@ import {
 	MaxFilesChangedViz,
 	MaxPrsPerDayViz,
 	MergedPrsViz,
-ProfileReadmeViz,
+	ProfileReadmeViz,
 	RepoActivityViz,
 	RuleCardGrid,
 } from "../../components/rules/rule-card-grid";
-import { RuleDropdown } from "../../components/rules/rule-dropdown";
 import { RulesSaveBar } from "../../components/rules/rules-save-bar";
 import { PeopleTab } from "../../components/rules/people-tab";
 import { EmptyState } from "../../components/layout/empty-state";
@@ -266,25 +265,6 @@ function RulesPage() {
 		activeConfig.cryptoAddressDetection.enabled,
 	].filter(Boolean).length;
 
-	const LANGUAGE_OPTIONS = [
-		"English",
-		"Spanish",
-		"French",
-		"German",
-		"Portuguese",
-		"Japanese",
-		"Chinese",
-		"Korean",
-		"Russian",
-		"Arabic",
-	];
-
-	const PR_COUNT_OPTIONS = ["5", "10", "15", "25", "50", "100"];
-	const ACCOUNT_AGE_OPTIONS = ["7 days", "14 days", "30 days", "60 days", "90 days", "180 days"];
-	const MAX_PRS_PER_DAY_OPTIONS = ["1", "2", "3", "5", "10"];
-	const MAX_FILES_CHANGED_OPTIONS = ["5", "10", "20", "50", "100"];
-	const REPO_ACTIVITY_OPTIONS = ["1", "3", "5", "10"];
-
 	if (!isLoading && repos.length === 0) {
 		return (
 			<EmptyState
@@ -322,7 +302,6 @@ function RulesPage() {
 		!q || r.searchable.includes(q) || r.title.toLowerCase().includes(q);
 
 	const installedRuleKeys = allRules.filter((r) => activeConfig[r.key].enabled);
-	const availableRuleKeys = allRules.filter((r) => !activeConfig[r.key].enabled);
 
 	return (
 		<div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-4 py-8 md:px-[50px] md:py-10">
@@ -384,6 +363,7 @@ function RulesPage() {
 						<div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
 				<RuleCardGrid
 					title="AI slop detection"
+					modalTitle="AI slop detection"
 					description="Use known detection patterns to minimize automated activity"
 					enabled={activeConfig.aiSlopDetection.enabled}
 					action={activeConfig.aiSlopDetection.action}
@@ -392,16 +372,8 @@ function RulesPage() {
 					visualization={<AiSlopViz />}
 				/>
 				<RuleCardGrid
-					title={(
-						<>
-							Require all contributions in{" "}
-							<RuleDropdown
-								value={activeConfig.languageRequirement.language}
-								options={LANGUAGE_OPTIONS}
-								onChange={(language) => updateRuleValue("languageRequirement", { language })}
-							/>
-						</>
-					)}
+					title={`Require contributions in ${activeConfig.languageRequirement.language}`}
+					modalTitle="Language requirement"
 					description="Contributions in a disallowed language will be declined"
 					enabled={activeConfig.languageRequirement.enabled}
 					action={activeConfig.languageRequirement.action}
@@ -410,103 +382,83 @@ function RulesPage() {
 					visualization={<LanguageViz />}
 				/>
 				<RuleCardGrid
-					title={(
-						<>
-							At least{" "}
-							<RuleDropdown
-								value={String(activeConfig.minMergedPrs.count)}
-								options={PR_COUNT_OPTIONS}
-								onChange={(value) => updateRuleValue("minMergedPrs", { count: Number(value) })}
-							/>{" "}
-							merged PRs
-						</>
-					)}
+					title={`At least ${activeConfig.minMergedPrs.count} merged PRs`}
+					modalTitle="Minimum merged PRs"
 					description="Minimum merged pull requests before they can contribute"
 					enabled={activeConfig.minMergedPrs.enabled}
 					action={activeConfig.minMergedPrs.action}
 					onToggle={(value) => toggleRule("minMergedPrs", value)}
 					onActionChange={(action) => updateRuleValue("minMergedPrs", { action })}
 					visualization={<MergedPrsViz />}
+					numericConfig={{
+						value: activeConfig.minMergedPrs.count,
+						label: "Minimum merged PRs",
+						onChange: (count) => updateRuleValue("minMergedPrs", { count }),
+					}}
 				/>
 				<RuleCardGrid
-					title={(
-						<>
-							Account older than{" "}
-							<RuleDropdown
-								value={`${activeConfig.accountAge.days} days`}
-								options={ACCOUNT_AGE_OPTIONS}
-								onChange={(value) =>
-									updateRuleValue("accountAge", { days: Number.parseInt(value, 10) })}
-							/>
-						</>
-					)}
+					title={`Account older than ${activeConfig.accountAge.days} days`}
+					modalTitle="Account age requirement"
 					description="Block accounts created too recently from contributing"
 					enabled={activeConfig.accountAge.enabled}
 					action={activeConfig.accountAge.action}
 					onToggle={(value) => toggleRule("accountAge", value)}
 					onActionChange={(action) => updateRuleValue("accountAge", { action })}
 					visualization={<AccountAgeViz />}
+					numericConfig={{
+						value: activeConfig.accountAge.days,
+						label: "Minimum account age (days)",
+						onChange: (days) => updateRuleValue("accountAge", { days }),
+					}}
 				/>
 				<RuleCardGrid
-					title={(
-						<>
-							Max{" "}
-							<RuleDropdown
-								value={String(activeConfig.maxPrsPerDay.limit)}
-								options={MAX_PRS_PER_DAY_OPTIONS}
-								onChange={(value) => updateRuleValue("maxPrsPerDay", { limit: Number(value) })}
-							/>{" "}
-							PRs per day
-						</>
-					)}
+					title={`Max ${activeConfig.maxPrsPerDay.limit} PRs per day`}
+					modalTitle="Max PRs per day"
 					description="Rate limit how many PRs or issues a single user can open per day"
 					enabled={activeConfig.maxPrsPerDay.enabled}
 					action={activeConfig.maxPrsPerDay.action}
 					onToggle={(value) => toggleRule("maxPrsPerDay", value)}
 					onActionChange={(action) => updateRuleValue("maxPrsPerDay", { action })}
 					visualization={<MaxPrsPerDayViz />}
+					numericConfig={{
+						value: activeConfig.maxPrsPerDay.limit,
+						label: "Maximum PRs per day",
+						onChange: (limit) => updateRuleValue("maxPrsPerDay", { limit }),
+					}}
 				/>
 				<RuleCardGrid
-					title={(
-						<>
-							Max{" "}
-							<RuleDropdown
-								value={String(activeConfig.maxFilesChanged.limit)}
-								options={MAX_FILES_CHANGED_OPTIONS}
-								onChange={(value) => updateRuleValue("maxFilesChanged", { limit: Number(value) })}
-							/>{" "}
-							files changed
-						</>
-					)}
+					title={`Max ${activeConfig.maxFilesChanged.limit} files changed`}
+					modalTitle="Max files changed"
 					description="Block pull requests that touch too many files in a single submission"
 					enabled={activeConfig.maxFilesChanged.enabled}
 					action={activeConfig.maxFilesChanged.action}
 					onToggle={(value) => toggleRule("maxFilesChanged", value)}
 					onActionChange={(action) => updateRuleValue("maxFilesChanged", { action })}
 					visualization={<MaxFilesChangedViz />}
+					numericConfig={{
+						value: activeConfig.maxFilesChanged.limit,
+						label: "Maximum files changed",
+						onChange: (limit) => updateRuleValue("maxFilesChanged", { limit }),
+					}}
 				/>
 				<RuleCardGrid
-					title={(
-						<>
-							At least{" "}
-							<RuleDropdown
-								value={String(activeConfig.repoActivityMinimum.minRepos)}
-								options={REPO_ACTIVITY_OPTIONS}
-								onChange={(value) =>
-									updateRuleValue("repoActivityMinimum", { minRepos: Number(value) })}
-							/>{" "}
-							public repos
-						</>
-					)}
+					title={`At least ${activeConfig.repoActivityMinimum.minRepos} public repos`}
+					modalTitle="Repo activity minimum"
 					description="Contributor must have meaningful activity across other public repos"
 					enabled={activeConfig.repoActivityMinimum.enabled}
 					action={activeConfig.repoActivityMinimum.action}
 					onToggle={(value) => toggleRule("repoActivityMinimum", value)}
 					onActionChange={(action) => updateRuleValue("repoActivityMinimum", { action })}
 					visualization={<RepoActivityViz />}
+					numericConfig={{
+						value: activeConfig.repoActivityMinimum.minRepos,
+						label: "Minimum public repos",
+						onChange: (minRepos) => updateRuleValue("repoActivityMinimum", { minRepos }),
+					}}
 				/>
 				<RuleCardGrid
 					title="Require profile README"
+					modalTitle="Require profile README"
 					description="Contributors must have a profile README on their GitHub account"
 					enabled={activeConfig.requireProfileReadme.enabled}
 					action={activeConfig.requireProfileReadme.action}
@@ -516,6 +468,7 @@ function RulesPage() {
 				/>
 				<RuleCardGrid
 					title="Crypto address detection"
+					modalTitle="Crypto address detection"
 					description="Block content containing cryptocurrency wallet addresses (BTC, ETH, SOL, XMR, DASH)"
 					enabled={activeConfig.cryptoAddressDetection.enabled}
 					action={activeConfig.cryptoAddressDetection.action}
@@ -536,33 +489,32 @@ function RulesPage() {
 							</div>
 						) : (
 							<div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-								{/* Same cards but filtered to enabled only — reuse the same JSX pattern */}
 								{activeConfig.aiSlopDetection.enabled && matchesSearch(allRules[0]) && (
-									<RuleCardGrid title="AI slop detection" description="Use known detection patterns to minimize automated activity" enabled={true} action={activeConfig.aiSlopDetection.action} onToggle={(v) => toggleRule("aiSlopDetection", v)} onActionChange={(a) => updateRuleValue("aiSlopDetection", { action: a })} visualization={<AiSlopViz />} />
+									<RuleCardGrid title="AI slop detection" modalTitle="AI slop detection" description="Use known detection patterns to minimize automated activity" enabled={true} action={activeConfig.aiSlopDetection.action} onToggle={(v) => toggleRule("aiSlopDetection", v)} onActionChange={(a) => updateRuleValue("aiSlopDetection", { action: a })} visualization={<AiSlopViz />} />
 								)}
 								{activeConfig.languageRequirement.enabled && matchesSearch(allRules[1]) && (
-									<RuleCardGrid title={<>Require all contributions in{" "}<RuleDropdown value={activeConfig.languageRequirement.language} options={LANGUAGE_OPTIONS} onChange={(language) => updateRuleValue("languageRequirement", { language })} /></>} description="Contributions in a disallowed language will be declined" enabled={true} action={activeConfig.languageRequirement.action} onToggle={(v) => toggleRule("languageRequirement", v)} onActionChange={(a) => updateRuleValue("languageRequirement", { action: a })} visualization={<LanguageViz />} />
+									<RuleCardGrid title={`Require contributions in ${activeConfig.languageRequirement.language}`} modalTitle="Language requirement" description="Contributions in a disallowed language will be declined" enabled={true} action={activeConfig.languageRequirement.action} onToggle={(v) => toggleRule("languageRequirement", v)} onActionChange={(a) => updateRuleValue("languageRequirement", { action: a })} visualization={<LanguageViz />} />
 								)}
 								{activeConfig.minMergedPrs.enabled && matchesSearch(allRules[2]) && (
-									<RuleCardGrid title={<>At least{" "}<RuleDropdown value={String(activeConfig.minMergedPrs.count)} options={PR_COUNT_OPTIONS} onChange={(v) => updateRuleValue("minMergedPrs", { count: Number(v) })} />{" "}merged PRs</>} description="Minimum merged pull requests before they can contribute" enabled={true} action={activeConfig.minMergedPrs.action} onToggle={(v) => toggleRule("minMergedPrs", v)} onActionChange={(a) => updateRuleValue("minMergedPrs", { action: a })} visualization={<MergedPrsViz />} />
+									<RuleCardGrid title={`At least ${activeConfig.minMergedPrs.count} merged PRs`} modalTitle="Minimum merged PRs" description="Minimum merged pull requests before they can contribute" enabled={true} action={activeConfig.minMergedPrs.action} onToggle={(v) => toggleRule("minMergedPrs", v)} onActionChange={(a) => updateRuleValue("minMergedPrs", { action: a })} visualization={<MergedPrsViz />} numericConfig={{ value: activeConfig.minMergedPrs.count, label: "Minimum merged PRs", onChange: (count) => updateRuleValue("minMergedPrs", { count }) }} />
 								)}
 								{activeConfig.accountAge.enabled && matchesSearch(allRules[3]) && (
-									<RuleCardGrid title={<>Account older than{" "}<RuleDropdown value={`${activeConfig.accountAge.days} days`} options={ACCOUNT_AGE_OPTIONS} onChange={(v) => updateRuleValue("accountAge", { days: Number.parseInt(v, 10) })} /></>} description="Block accounts created too recently from contributing" enabled={true} action={activeConfig.accountAge.action} onToggle={(v) => toggleRule("accountAge", v)} onActionChange={(a) => updateRuleValue("accountAge", { action: a })} visualization={<AccountAgeViz />} />
+									<RuleCardGrid title={`Account older than ${activeConfig.accountAge.days} days`} modalTitle="Account age requirement" description="Block accounts created too recently from contributing" enabled={true} action={activeConfig.accountAge.action} onToggle={(v) => toggleRule("accountAge", v)} onActionChange={(a) => updateRuleValue("accountAge", { action: a })} visualization={<AccountAgeViz />} numericConfig={{ value: activeConfig.accountAge.days, label: "Minimum account age (days)", onChange: (days) => updateRuleValue("accountAge", { days }) }} />
 								)}
 								{activeConfig.maxPrsPerDay.enabled && matchesSearch(allRules[4]) && (
-									<RuleCardGrid title={<>Max{" "}<RuleDropdown value={String(activeConfig.maxPrsPerDay.limit)} options={MAX_PRS_PER_DAY_OPTIONS} onChange={(v) => updateRuleValue("maxPrsPerDay", { limit: Number(v) })} />{" "}PRs per day</>} description="Rate limit how many PRs or issues a single user can open per day" enabled={true} action={activeConfig.maxPrsPerDay.action} onToggle={(v) => toggleRule("maxPrsPerDay", v)} onActionChange={(a) => updateRuleValue("maxPrsPerDay", { action: a })} visualization={<MaxPrsPerDayViz />} />
+									<RuleCardGrid title={`Max ${activeConfig.maxPrsPerDay.limit} PRs per day`} modalTitle="Max PRs per day" description="Rate limit how many PRs or issues a single user can open per day" enabled={true} action={activeConfig.maxPrsPerDay.action} onToggle={(v) => toggleRule("maxPrsPerDay", v)} onActionChange={(a) => updateRuleValue("maxPrsPerDay", { action: a })} visualization={<MaxPrsPerDayViz />} numericConfig={{ value: activeConfig.maxPrsPerDay.limit, label: "Maximum PRs per day", onChange: (limit) => updateRuleValue("maxPrsPerDay", { limit }) }} />
 								)}
 								{activeConfig.maxFilesChanged.enabled && matchesSearch(allRules[5]) && (
-									<RuleCardGrid title={<>Max{" "}<RuleDropdown value={String(activeConfig.maxFilesChanged.limit)} options={MAX_FILES_CHANGED_OPTIONS} onChange={(v) => updateRuleValue("maxFilesChanged", { limit: Number(v) })} />{" "}files changed</>} description="Block pull requests that touch too many files in a single submission" enabled={true} action={activeConfig.maxFilesChanged.action} onToggle={(v) => toggleRule("maxFilesChanged", v)} onActionChange={(a) => updateRuleValue("maxFilesChanged", { action: a })} visualization={<MaxFilesChangedViz />} />
+									<RuleCardGrid title={`Max ${activeConfig.maxFilesChanged.limit} files changed`} modalTitle="Max files changed" description="Block pull requests that touch too many files in a single submission" enabled={true} action={activeConfig.maxFilesChanged.action} onToggle={(v) => toggleRule("maxFilesChanged", v)} onActionChange={(a) => updateRuleValue("maxFilesChanged", { action: a })} visualization={<MaxFilesChangedViz />} numericConfig={{ value: activeConfig.maxFilesChanged.limit, label: "Maximum files changed", onChange: (limit) => updateRuleValue("maxFilesChanged", { limit }) }} />
 								)}
 								{activeConfig.repoActivityMinimum.enabled && matchesSearch(allRules[6]) && (
-									<RuleCardGrid title={<>At least{" "}<RuleDropdown value={String(activeConfig.repoActivityMinimum.minRepos)} options={REPO_ACTIVITY_OPTIONS} onChange={(v) => updateRuleValue("repoActivityMinimum", { minRepos: Number(v) })} />{" "}public repos</>} description="Contributor must have meaningful activity across other public repos" enabled={true} action={activeConfig.repoActivityMinimum.action} onToggle={(v) => toggleRule("repoActivityMinimum", v)} onActionChange={(a) => updateRuleValue("repoActivityMinimum", { action: a })} visualization={<RepoActivityViz />} />
+									<RuleCardGrid title={`At least ${activeConfig.repoActivityMinimum.minRepos} public repos`} modalTitle="Repo activity minimum" description="Contributor must have meaningful activity across other public repos" enabled={true} action={activeConfig.repoActivityMinimum.action} onToggle={(v) => toggleRule("repoActivityMinimum", v)} onActionChange={(a) => updateRuleValue("repoActivityMinimum", { action: a })} visualization={<RepoActivityViz />} numericConfig={{ value: activeConfig.repoActivityMinimum.minRepos, label: "Minimum public repos", onChange: (minRepos) => updateRuleValue("repoActivityMinimum", { minRepos }) }} />
 								)}
 								{activeConfig.requireProfileReadme.enabled && matchesSearch(allRules[7]) && (
-									<RuleCardGrid title="Require profile README" description="Contributors must have a profile README on their GitHub account" enabled={true} action={activeConfig.requireProfileReadme.action} onToggle={(v) => toggleRule("requireProfileReadme", v)} onActionChange={(a) => updateRuleValue("requireProfileReadme", { action: a })} visualization={<ProfileReadmeViz />} />
+									<RuleCardGrid title="Require profile README" modalTitle="Require profile README" description="Contributors must have a profile README on their GitHub account" enabled={true} action={activeConfig.requireProfileReadme.action} onToggle={(v) => toggleRule("requireProfileReadme", v)} onActionChange={(a) => updateRuleValue("requireProfileReadme", { action: a })} visualization={<ProfileReadmeViz />} />
 								)}
 								{activeConfig.cryptoAddressDetection.enabled && matchesSearch(allRules[8]) && (
-									<RuleCardGrid title="Crypto address detection" description="Block content containing cryptocurrency wallet addresses (BTC, ETH, SOL, XMR, DASH)" enabled={true} action={activeConfig.cryptoAddressDetection.action} onToggle={(v) => toggleRule("cryptoAddressDetection", v)} onActionChange={(a) => updateRuleValue("cryptoAddressDetection", { action: a })} visualization={<CryptoViz />} />
+									<RuleCardGrid title="Crypto address detection" modalTitle="Crypto address detection" description="Block content containing cryptocurrency wallet addresses (BTC, ETH, SOL, XMR, DASH)" enabled={true} action={activeConfig.cryptoAddressDetection.action} onToggle={(v) => toggleRule("cryptoAddressDetection", v)} onActionChange={(a) => updateRuleValue("cryptoAddressDetection", { action: a })} visualization={<CryptoViz />} />
 								)}
 							</div>
 						)
