@@ -95,7 +95,7 @@ export function RuleCardGrid({
 								onActionChange(a);
 							}}
 							className={`
-								px-2 py-0.5 rounded-md text-[11px] font-medium border-none cursor-pointer transition-colors
+								px-2 py-0.5 rounded-md text-[11px] font-medium border-none cursor-pointer transition-colors whitespace-nowrap
 								${action === a
 									? `bg-white/10 ${ACTION_COLORS[a]}`
 									: "bg-transparent text-[#FFFFFF33] hover:text-[#FFFFFF59]"
