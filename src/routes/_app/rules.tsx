@@ -370,6 +370,7 @@ function RulesPage() {
 					onToggle={(value) => toggleRule("aiSlopDetection", value)}
 					onActionChange={(action) => updateRuleValue("aiSlopDetection", { action })}
 					visualization={<AiSlopViz />}
+					comingSoon
 				/>
 				<RuleCardGrid
 					title={`Require contributions in ${activeConfig.languageRequirement.language}`}
@@ -490,7 +491,7 @@ function RulesPage() {
 						) : (
 							<div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
 								{activeConfig.aiSlopDetection.enabled && matchesSearch(allRules[0]) && (
-									<RuleCardGrid title="AI slop detection" modalTitle="AI slop detection" description="Use known detection patterns to minimize automated activity" enabled={true} action={activeConfig.aiSlopDetection.action} onToggle={(v) => toggleRule("aiSlopDetection", v)} onActionChange={(a) => updateRuleValue("aiSlopDetection", { action: a })} visualization={<AiSlopViz />} />
+									<RuleCardGrid title="AI slop detection" modalTitle="AI slop detection" description="Use known detection patterns to minimize automated activity" enabled={true} action={activeConfig.aiSlopDetection.action} onToggle={(v) => toggleRule("aiSlopDetection", v)} onActionChange={(a) => updateRuleValue("aiSlopDetection", { action: a })} visualization={<AiSlopViz />} comingSoon />
 								)}
 								{activeConfig.languageRequirement.enabled && matchesSearch(allRules[1]) && (
 									<RuleCardGrid title={`Require contributions in ${activeConfig.languageRequirement.language}`} modalTitle="Language requirement" description="Contributions in a disallowed language will be declined" enabled={true} action={activeConfig.languageRequirement.action} onToggle={(v) => toggleRule("languageRequirement", v)} onActionChange={(a) => updateRuleValue("languageRequirement", { action: a })} visualization={<LanguageViz />} />
@@ -591,18 +592,19 @@ function RulesPage() {
 						className="gap-1.5 border-t border-white/[0.05] bg-transparent px-2 py-2"
 						variant="default"
 					>
-						<button
-							type="button"
+						<Button
+							variant="ghost"
+							size="sm"
 							onClick={() => leaveBlocker.reset?.()}
-							className="inline-flex h-8 items-center rounded-[10px] px-3 text-[12px] font-medium text-tw-text-tertiary transition-colors hover:bg-tw-hover hover:text-tw-text-secondary"
+							className="h-8 rounded-[10px] px-3 text-[12px] text-tw-text-tertiary hover:bg-tw-hover hover:text-tw-text-secondary"
 						>
 							Stay
-						</button>
+						</Button>
 						<Button
+							variant="secondary"
 							size="sm"
-							variant="destructive"
 							onClick={() => leaveBlocker.proceed?.()}
-							className="h-8 rounded-[10px] px-3 text-[12px] font-medium"
+							className="h-8 rounded-[10px] px-3 text-[12px] bg-white text-black hover:bg-white/90"
 						>
 							Leave
 						</Button>

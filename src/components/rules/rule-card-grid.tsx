@@ -6,6 +6,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog";
+import { Button } from "#/components/ui/button";
 
 export {
 	AiSlopViz,
@@ -30,7 +31,7 @@ const ACTION_LABELS: Record<RuleAction, string> = {
 const ACTION_COLORS: Record<RuleAction, { active: string; chip: string }> = {
 	block: { active: "text-red-400", chip: "bg-red-500/15 text-red-400 border-red-500/30" },
 	warn: { active: "text-amber-400", chip: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
-	log: { active: "text-[#FFFFFF99]", chip: "bg-white/10 text-[#FFFFFF99] border-white/20" },
+	log: { active: "text-white/60", chip: "bg-white/10 text-white/60 border-white/20" },
 	threshold: { active: "text-tw-accent", chip: "bg-tw-accent/15 text-tw-accent border-tw-accent/30" },
 };
 
@@ -51,6 +52,8 @@ interface RuleCardGridProps {
 	onActionChange?: (action: RuleAction) => void;
 	visualization: ReactNode;
 	numericConfig?: NumericConfig;
+	/** Mark as coming soon - disables interaction */
+	comingSoon?: boolean;
 }
 
 export function RuleCardGrid({
@@ -63,10 +66,12 @@ export function RuleCardGrid({
 	onActionChange,
 	visualization,
 	numericConfig,
+	comingSoon,
 }: RuleCardGridProps) {
 	const [configureOpen, setConfigureOpen] = useState(false);
 
 	const handleCardClick = (e: React.MouseEvent) => {
+		if (comingSoon) return;
 		// Don't toggle if clicking on interactive elements (dropdowns, buttons inside title)
 		const target = e.target as HTMLElement;
 		if (target.closest('[data-dropdown]') || target.closest('[data-action-select]') || target.closest('button:not([data-card-toggle])')) {
@@ -79,53 +84,68 @@ export function RuleCardGrid({
 		<>
 			<div
 				onClick={handleCardClick}
-				className={`flex flex-col relative rounded-xl gap-3 bg-tw-card border p-3.5 transition-colors cursor-pointer hover:bg-tw-hover-light ${
-					enabled ? "border-tw-accent/40" : "border-tw-border-card"
+				className={`flex flex-col relative rounded-xl gap-3 bg-tw-card border p-3.5 transition-colors ${
+					comingSoon
+						? "border-tw-border-card cursor-default"
+						: enabled
+							? "border-tw-accent/40 cursor-pointer hover:bg-tw-hover-light"
+							: "border-tw-border-card cursor-pointer hover:bg-tw-hover-light"
 				}`}
 			>
 				{/* Visualization */}
 				<div className={`flex justify-center pt-2.5 pb-1 transition-all pointer-events-none ${
-					enabled ? "opacity-60" : "opacity-30 grayscale"
+					comingSoon ? "opacity-20 grayscale" : enabled ? "opacity-60" : "opacity-30 grayscale"
 				}`}>
 					{visualization}
 				</div>
 
 				{/* Content */}
 				<div>
-					<div className="tracking-[-0.3px] text-tw-text-primary font-medium text-[15px] leading-5">
+					<div className={`tracking-[-0.3px] font-medium text-[15px] leading-5 ${comingSoon ? "text-tw-text-tertiary" : "text-tw-text-primary"}`}>
 						{title}
 					</div>
-					<div className="mt-0.5 text-tw-text-secondary text-xs leading-4">
+					<div className={`mt-0.5 text-xs leading-4 ${comingSoon ? "text-tw-text-tertiary" : "text-tw-text-secondary"}`}>
 						{description}
 					</div>
 				</div>
 
-				{/* Action badge — only visible when enabled */}
-				{enabled && (
-					<div className="flex items-center">
+				{/* Action badge + numeric chip — only visible when enabled */}
+				{enabled && !comingSoon && (
+					<div className="flex items-center gap-2">
 						<span className={`text-[11px] font-medium ${ACTION_COLORS[action].active}`}>
 							{ACTION_LABELS[action]}
 						</span>
+						{numericConfig && (
+							<span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-tw-surface text-tw-text-secondary">
+								{numericConfig.value}
+							</span>
+						)}
 					</div>
 				)}
 
-				{/* Install / Configure button */}
-				{enabled ? (
-					<button
-						type="button"
+				{/* Coming soon badge */}
+				{comingSoon ? (
+					<span className="absolute right-3 top-3 h-6 px-2.5 rounded-md text-[11px] font-medium bg-tw-surface text-tw-text-tertiary flex items-center">
+						Coming soon
+					</span>
+				) : enabled ? (
+					<Button
+						variant="ghost"
+						size="xs"
 						onClick={(e) => { e.stopPropagation(); setConfigureOpen(true); }}
-						className="absolute right-3 top-3 h-6 px-2.5 rounded-md text-[11px] font-medium transition-colors bg-white text-black hover:bg-white/90"
+						className="absolute right-3 top-3 h-6 px-2.5 text-[11px] bg-tw-button-muted text-white hover:bg-tw-button-muted-hover"
 					>
 						Configure
-					</button>
+					</Button>
 				) : (
-					<button
-						type="button"
+					<Button
+						variant="ghost"
+						size="xs"
 						onClick={(e) => { e.stopPropagation(); onToggle(true); }}
-						className="absolute right-3 top-3 h-6 px-2.5 rounded-md text-[11px] font-medium transition-colors bg-[#ffffff14] text-white hover:bg-[#ffffff22]"
+						className="absolute right-3 top-3 h-6 px-2.5 text-[11px] bg-tw-button-muted text-white hover:bg-tw-button-muted-hover"
 					>
 						Install
-					</button>
+					</Button>
 				)}
 			</div>
 
@@ -150,12 +170,13 @@ export function RuleCardGrid({
 								</label>
 								<div className="flex flex-wrap items-center gap-1.5">
 									{(["block", "warn", "log"] as const).map((a) => (
-										<button
+										<Button
 											key={a}
-											type="button"
+											variant="ghost"
+											size="xs"
 											onClick={() => onActionChange(a)}
 											className={`
-												px-3 py-1.5 rounded-lg text-[12px] font-medium border cursor-pointer transition-all whitespace-nowrap
+												px-3 py-1.5 text-[12px] border whitespace-nowrap
 												${action === a
 													? ACTION_COLORS[a].chip
 													: "bg-transparent text-tw-text-tertiary border-tw-border hover:border-tw-text-tertiary hover:text-tw-text-secondary"
@@ -163,7 +184,7 @@ export function RuleCardGrid({
 											`}
 										>
 											{ACTION_LABELS[a]}
-										</button>
+										</Button>
 									))}
 								</div>
 							</div>
@@ -194,16 +215,17 @@ export function RuleCardGrid({
 						)}
 
 						{/* Uninstall button */}
-						<button
-							type="button"
+						<Button
+							variant="ghost"
+							size="xs"
 							onClick={() => {
 								onToggle(false);
 								setConfigureOpen(false);
 							}}
-							className="mt-2 text-[12px] text-tw-text-tertiary hover:text-red-400 transition-colors self-start"
+							className="mt-2 text-[12px] text-tw-text-tertiary hover:text-red-400 self-start"
 						>
 							Uninstall rule
-						</button>
+						</Button>
 					</div>
 				</DialogContent>
 			</Dialog>

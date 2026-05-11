@@ -38,6 +38,10 @@
   --color-tw-text-muted: #9F9FA9;
   --color-tw-text-tertiary: #6E6E6E;
 
+  /* Button colors */
+  --color-tw-button-muted: #FFFFFF14;
+  --color-tw-button-muted-hover: #FFFFFF22;
+
   /* Semantic colors */
   --color-tw-accent: #34A6FF;
   --color-tw-success: #67E19F;
