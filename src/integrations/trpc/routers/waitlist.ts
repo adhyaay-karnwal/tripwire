@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { createTRPCRouter, publicProcedure } from "../init";
 import { db } from "#/db";
 import { waitlist } from "#/db/schema";
@@ -8,9 +9,13 @@ import { trpcError } from "../error";
 export const waitlistRouter = createTRPCRouter({
 	join: publicProcedure
 		.input(z.object({ email: z.string().email() }))
-		.mutation(async ({ input, ctx }) => {
-			// Rate limit by IP or email
-			const identifier = ctx.headers?.get("x-forwarded-for") ?? input.email;
+		.mutation(async ({ input }) => {
+			// Rate limit by a stable hash of the (lowercased) email. The previous
+			// x-forwarded-for-based identifier was trivially spoofable.
+			const identifier = createHash("sha256")
+				.update(input.email.toLowerCase())
+				.digest("hex")
+				.slice(0, 32);
 			await checkRateLimit("waitlist", identifier);
 
 			try {

@@ -3,6 +3,14 @@ import { env } from "#/env";
 import { TRPCError } from "@trpc/server";
 
 // ---------------------------------------------------------------------------
+// Production guard: refuse to start if rate limiting isn't configured
+// ---------------------------------------------------------------------------
+
+if (process.env.NODE_ENV === "production" && !process.env.UNKEY_ROOT_KEY) {
+	throw new Error("UNKEY_ROOT_KEY is required in production");
+}
+
+// ---------------------------------------------------------------------------
 // Namespace configs
 // ---------------------------------------------------------------------------
 
@@ -71,8 +79,16 @@ export async function checkRateLimit(
 
 		return { success: true, remaining: result.remaining };
 	} catch (err) {
-		// Re-throw rate limit errors, but silently allow on infrastructure failures
+		// Re-throw rate limit errors
 		if (err instanceof TRPCError) throw err;
+		// In production, fail closed: surface infrastructure failures as 429.
+		if (process.env.NODE_ENV === "production") {
+			throw new TRPCError({
+				code: "TOO_MANY_REQUESTS",
+				message: "Rate limit unavailable — try again shortly.",
+			});
+		}
+		// In dev, silently allow on infrastructure failures
 		return { success: true, remaining: -1 };
 	}
 }
