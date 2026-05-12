@@ -12,7 +12,6 @@ import {
 	DEFAULT_RULE_CONFIG,
 	type EventAction,
 	type RuleConfig,
-	type RuleAction,
 } from "#/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { logEvent } from "#/lib/events";
@@ -211,6 +210,7 @@ languageRequirement: "Language Requirement",
 	repoActivityMinimum: "Repo Activity Minimum",
 	requireProfileReadme: "Require Profile README",
 	cryptoAddressDetection: "Crypto Address Detection",
+	vouchedUsersOnly: "Vouched Users Only",
 };
 
 function getRuleDetail(ruleId: string, config: Record<string, unknown>): string | undefined {
@@ -973,13 +973,14 @@ export function createTripwireTools(ctx: ToolContext) {
 
 			config[ruleId] = { ...config[ruleId], enabled };
 
+			const nextConfig = config as unknown as RuleConfig;
 			if (configRow) {
 				await db
 					.update(ruleConfigs)
-					.set({ config, updatedAt: new Date() })
+					.set({ config: nextConfig, updatedAt: new Date() })
 					.where(eq(ruleConfigs.repoId, repoId));
 			} else {
-				await db.insert(ruleConfigs).values({ repoId, config });
+				await db.insert(ruleConfigs).values({ repoId, config: nextConfig });
 			}
 
 			const ruleName = RULE_NAMES[ruleId] ?? ruleId;
@@ -1023,13 +1024,14 @@ export function createTripwireTools(ctx: ToolContext) {
 				...(action === "threshold" && thresholdCount ? { thresholdCount } : {}),
 			};
 
+			const nextConfig = config as unknown as RuleConfig;
 			if (configRow) {
 				await db
 					.update(ruleConfigs)
-					.set({ config, updatedAt: new Date() })
+					.set({ config: nextConfig, updatedAt: new Date() })
 					.where(eq(ruleConfigs.repoId, repoId));
 			} else {
-				await db.insert(ruleConfigs).values({ repoId, config });
+				await db.insert(ruleConfigs).values({ repoId, config: nextConfig });
 			}
 
 			const ruleName = RULE_NAMES[ruleId] ?? ruleId;
@@ -1078,13 +1080,14 @@ export function createTripwireTools(ctx: ToolContext) {
 
 			config[ruleId] = { ...config[ruleId], [field]: value };
 
+			const nextConfig = config as unknown as RuleConfig;
 			if (configRow) {
 				await db
 					.update(ruleConfigs)
-					.set({ config, updatedAt: new Date() })
+					.set({ config: nextConfig, updatedAt: new Date() })
 					.where(eq(ruleConfigs.repoId, repoId));
 			} else {
-				await db.insert(ruleConfigs).values({ repoId, config });
+				await db.insert(ruleConfigs).values({ repoId, config: nextConfig });
 			}
 
 			const ruleName = RULE_NAMES[ruleId] ?? ruleId;

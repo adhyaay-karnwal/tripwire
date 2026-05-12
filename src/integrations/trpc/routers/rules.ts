@@ -33,6 +33,7 @@ const ruleConfigSchema = z.object({
 	repoActivityMinimum: ruleBaseSchema.extend({ minRepos: z.number().int().min(1) }),
 	requireProfileReadme: ruleBaseSchema,
 	cryptoAddressDetection: ruleBaseSchema,
+	vouchedUsersOnly: ruleBaseSchema,
 });
 
 export const rulesRouter = {

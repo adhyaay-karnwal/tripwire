@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "#/lib/auth-context";
 import { authClient } from "#/lib/auth-client";
 import {
@@ -184,7 +185,14 @@ function DeleteAccountRow() {
 }
 
 function SessionsList() {
-	const { data: sessions, isPending } = authClient.useListSessions();
+	const { data: sessions, isPending } = useQuery({
+		queryKey: ["auth", "sessions"],
+		queryFn: async () => {
+			const result = await authClient.listSessions();
+			return result.data ?? [];
+		},
+		staleTime: 30 * 1000,
+	});
 
 	if (isPending) {
 		return (

@@ -274,6 +274,51 @@ export function ProfileReadmeViz() {
 	);
 }
 
+export function VouchedUsersViz() {
+	// Roster of vouched user chips with a "check" trust badge
+	const rows = [
+		{ y: 12, w: 32, vouched: true },
+		{ y: 24, w: 26, vouched: true },
+		{ y: 36, w: 30, vouched: false },
+		{ y: 48, w: 28, vouched: true },
+	];
+	return (
+		<svg width="110" height="86" viewBox="0 0 72 56" fill="none">
+			{rows.map((r, i) => (
+				<g key={i}>
+					<circle
+						cx="12"
+						cy={r.y}
+						r="3.5"
+						fill="rgba(255,255,255,0.05)"
+						stroke={r.vouched ? "rgba(52,166,255,0.4)" : "rgba(255,255,255,0.08)"}
+						strokeWidth="0.8"
+					/>
+					<rect
+						x="20"
+						y={r.y - 2}
+						width={r.w}
+						height="3"
+						rx="1.5"
+						fill={r.vouched ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)"}
+					/>
+					{r.vouched ? (
+						<g>
+							<circle cx="60" cy={r.y} r="3" fill="rgba(52,166,255,0.18)" stroke="#34A6FF" strokeWidth="0.7" opacity="0.7" />
+							<path d={`M58.5 ${r.y} l1.1 1 1.9-2`} stroke="#34A6FF" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+						</g>
+					) : (
+						<g>
+							<line x1="58" y1={r.y - 1.5} x2="62" y2={r.y + 1.5} stroke="rgba(255,255,255,0.18)" strokeWidth="0.8" strokeLinecap="round" />
+							<line x1="62" y1={r.y - 1.5} x2="58" y2={r.y + 1.5} stroke="rgba(255,255,255,0.18)" strokeWidth="0.8" strokeLinecap="round" />
+						</g>
+					)}
+				</g>
+			))}
+		</svg>
+	);
+}
+
 export function CryptoViz() {
 	// Wallet address fragments with a "blocked" indicator
 	const lines = [

@@ -21,6 +21,7 @@ import { Route as AppInsightsRouteImport } from './routes/_app/insights'
 import { Route as AppHomeRouteImport } from './routes/_app/home'
 import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
 import { Route as AppEventsIndexRouteImport } from './routes/_app/events.index'
+import { Route as RequestOwnerRepoRouteImport } from './routes/request.$owner.$repo'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
 import { Route as ApiGithubWebhookRouteImport } from './routes/api.github.webhook'
 import { Route as ApiGithubCallbackRouteImport } from './routes/api.github.callback'
@@ -90,6 +91,11 @@ const AppEventsIndexRoute = AppEventsIndexRouteImport.update({
   path: '/events/',
   getParentRoute: () => AppRoute,
 } as any)
+const RequestOwnerRepoRoute = RequestOwnerRepoRouteImport.update({
+  id: '/request/$owner/$repo',
+  path: '/request/$owner/$repo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   id: '/api/trpc/$',
   path: '/api/trpc/$',
@@ -156,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/events/': typeof AppEventsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/events': typeof AppEventsIndexRoute
 }
 export interface FileRoutesById {
@@ -202,6 +210,7 @@ export interface FileRoutesById {
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/_app/events/': typeof AppEventsIndexRoute
 }
 export interface FileRouteTypes {
@@ -226,6 +235,7 @@ export interface FileRouteTypes {
     | '/api/github/callback'
     | '/api/github/webhook'
     | '/api/trpc/$'
+    | '/request/$owner/$repo'
     | '/events/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/api/github/callback'
     | '/api/github/webhook'
     | '/api/trpc/$'
+    | '/request/$owner/$repo'
     | '/events'
   id:
     | '__root__'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/api/github/callback'
     | '/api/github/webhook'
     | '/api/trpc/$'
+    | '/request/$owner/$repo'
     | '/_app/events/'
   fileRoutesById: FileRoutesById
 }
@@ -283,6 +295,7 @@ export interface RootRouteChildren {
   ApiGithubCallbackRoute: typeof ApiGithubCallbackRoute
   ApiGithubWebhookRoute: typeof ApiGithubWebhookRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
+  RequestOwnerRepoRoute: typeof RequestOwnerRepoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -370,6 +383,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/events/'
       preLoaderRoute: typeof AppEventsIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/request/$owner/$repo': {
+      id: '/request/$owner/$repo'
+      path: '/request/$owner/$repo'
+      fullPath: '/request/$owner/$repo'
+      preLoaderRoute: typeof RequestOwnerRepoRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/trpc/$': {
       id: '/api/trpc/$'
@@ -490,6 +510,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGithubCallbackRoute: ApiGithubCallbackRoute,
   ApiGithubWebhookRoute: ApiGithubWebhookRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
+  RequestOwnerRepoRoute: RequestOwnerRepoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

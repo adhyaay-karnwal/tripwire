@@ -26,6 +26,28 @@ import {
 } from "./github-api";
 import { logEvent, logEvents } from "#/lib/events";
 
+const APP_BASE_URL = process.env.BETTER_AUTH_URL ?? "";
+
+function buildRequestUrl(repoFullName: string, kind?: "unblock" | "access"): string {
+	const base = APP_BASE_URL.replace(/\/$/, "");
+	const path = `/request/${repoFullName}${kind ? `?kind=${kind}` : ""}`;
+	return base ? `${base}${path}` : path;
+}
+
+function appealFooter(repoFullName: string, outcome: PipelineResult["outcome"]): string {
+	if (outcome === "blacklist_blocked") {
+		const url = buildRequestUrl(repoFullName, "unblock");
+		return `> **Blacklisted from this repository.** [Appeal this block](${url}) if you think it was a mistake.`;
+	}
+	const url = buildRequestUrl(repoFullName, "unblock");
+	return `> Think this was a mistake? [Request a review](${url}).`;
+}
+
+function warnFooter(repoFullName: string): string {
+	const url = buildRequestUrl(repoFullName, "access");
+	return `> Want to skip these checks in the future? [Request vouched access](${url}).`;
+}
+
 // ─── Types ─────────────────────────────────────────────────────
 
 export interface WebhookContext {
@@ -272,7 +294,39 @@ export async function runFilterPipeline(
 		repoActivityMinimum: { ...DEFAULT_RULE_CONFIG.repoActivityMinimum, ...rawConfig?.repoActivityMinimum },
 		requireProfileReadme: { ...DEFAULT_RULE_CONFIG.requireProfileReadme, ...rawConfig?.requireProfileReadme },
 		cryptoAddressDetection: { ...DEFAULT_RULE_CONFIG.cryptoAddressDetection, ...rawConfig?.cryptoAddressDetection },
+		vouchedUsersOnly: { ...DEFAULT_RULE_CONFIG.vouchedUsersOnly, ...rawConfig?.vouchedUsersOnly },
 	};
+
+	// ─── vouchedUsersOnly ──────────────────────────────────────
+	// Non-vouched (not-whitelisted) users are rejected before any
+	// per-user GitHub lookups. Whitelisted users already returned above.
+	if (config.vouchedUsersOnly.enabled) {
+		rulesChecked++;
+		const reason = `@${ctx.senderLogin} is not a vouched contributor for this repository.`;
+		evaluations.push({
+			rule: "vouchedUsersOnly",
+			passed: false,
+			nearMiss: false,
+			reason,
+		});
+		const action = config.vouchedUsersOnly.action;
+		const allowed = action === "log";
+		const outcome = action === "block" || action === "threshold"
+			? "blocked"
+			: action === "warn"
+				? "warned"
+				: "logged";
+		return {
+			allowed,
+			outcome,
+			blockingRule: "vouchedUsersOnly",
+			blockReason: reason,
+			resolvedAction: action,
+			evaluations,
+			rulesChecked,
+			repoId: repo.id,
+		};
+	}
 
 	const token = await getInstallationToken(ctx.installationId);
 
@@ -737,7 +791,7 @@ export async function handlePullRequest(
 	const token = await getInstallationToken(ctx.installationId);
 
 	if (action === "block" || action === "threshold") {
-		const comment = `> **Tripwire** — This PR was automatically closed.\n>\n> Reason: ${result.blockReason}`;
+		const comment = `> **Tripwire** — This PR was automatically closed.\n>\n> Reason: ${result.blockReason}\n>\n${appealFooter(ctx.repoFullName, result.outcome)}`;
 		await closePullRequest(token, owner, repo, prNumber, comment);
 
 		if (result.repoId) {
@@ -755,7 +809,7 @@ export async function handlePullRequest(
 			});
 		}
 	} else if (action === "warn") {
-		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._`;
+		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._\n>\n${warnFooter(ctx.repoFullName)}`;
 		await addComment(token, owner, repo, prNumber, comment);
 
 		if (result.repoId) {
@@ -796,7 +850,7 @@ export async function handleIssue(
 	const token = await getInstallationToken(ctx.installationId);
 
 	if (action === "block" || action === "threshold") {
-		const comment = `> **Tripwire** — This issue was automatically closed.\n>\n> Reason: ${result.blockReason}`;
+		const comment = `> **Tripwire** — This issue was automatically closed.\n>\n> Reason: ${result.blockReason}\n>\n${appealFooter(ctx.repoFullName, result.outcome)}`;
 		await closeIssue(token, owner, repo, issueNumber, comment);
 
 		if (result.repoId) {
@@ -814,7 +868,7 @@ export async function handleIssue(
 			});
 		}
 	} else if (action === "warn") {
-		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._`;
+		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._\n>\n${warnFooter(ctx.repoFullName)}`;
 		await addComment(token, owner, repo, issueNumber, comment);
 
 		if (result.repoId) {
@@ -870,7 +924,7 @@ export async function handleComment(
 			});
 		}
 	} else if (action === "warn") {
-		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._`;
+		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._\n>\n${warnFooter(ctx.repoFullName)}`;
 		await addComment(token, owner, repo, issueNumber, comment);
 
 		if (result.repoId) {

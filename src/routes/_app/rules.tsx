@@ -12,6 +12,7 @@ import {
 	ProfileReadmeViz,
 	RepoActivityViz,
 	RuleCardGrid,
+	VouchedUsersViz,
 } from "../../components/rules/rule-card-grid";
 import { RulesSaveBar } from "../../components/rules/rules-save-bar";
 import { PeopleTab } from "../../components/rules/people-tab";
@@ -250,8 +251,39 @@ function RulesPage() {
 		staleTime: 5 * 60 * 1000,
 	});
 
-	const [tab, setTab] = useState<"marketplace" | "installed" | "people">("marketplace");
+	const [tab, setTab] = useState<"marketplace" | "installed" | "people" | "requests">("marketplace");
 	const [searchQuery, setSearchQuery] = useState("");
+
+	const requestsQuery = useQuery(
+		trpc.requests.list.queryOptions(
+			{ repoId: repoId!, status: "pending" },
+			{ enabled: !!repoId, staleTime: 30 * 1000 },
+		),
+	);
+	const pendingRequestCount = requestsQuery.data?.length ?? 0;
+
+	const decideRequest = useMutation(
+		trpc.requests.decide.mutationOptions({
+			onSuccess: (_, vars) => {
+				toastManager.add({
+					title: vars.decision === "approve" ? "Request approved" : "Request denied",
+					type: "success",
+				});
+				queryClient.invalidateQueries({
+					queryKey: trpc.requests.list.queryKey({ repoId: repoId!, status: "pending" }),
+				});
+				queryClient.invalidateQueries({
+					queryKey: trpc.whitelist.list.queryKey({ repoId: repoId! }),
+				});
+				queryClient.invalidateQueries({
+					queryKey: trpc.blacklist.list.queryKey({ repoId: repoId! }),
+				});
+			},
+			onError: (e) => {
+				toastManager.add({ title: "Action failed", description: e.message, type: "error" });
+			},
+		}),
+	);
 
 	const activeCount = [
 		activeConfig.aiSlopDetection.enabled,
@@ -263,6 +295,7 @@ function RulesPage() {
 		activeConfig.repoActivityMinimum.enabled,
 		activeConfig.requireProfileReadme.enabled,
 		activeConfig.cryptoAddressDetection.enabled,
+		activeConfig.vouchedUsersOnly.enabled,
 	].filter(Boolean).length;
 
 	if (!isLoading && repos.length === 0) {
@@ -295,6 +328,7 @@ function RulesPage() {
 		{ key: "repoActivityMinimum" as const, title: "Repo activity minimum", searchable: "repo activity minimum public repos" },
 		{ key: "requireProfileReadme" as const, title: "Require profile README", searchable: "require profile readme" },
 		{ key: "cryptoAddressDetection" as const, title: "Crypto address detection", searchable: "crypto address detection bitcoin ethereum" },
+		{ key: "vouchedUsersOnly" as const, title: "Vouched users only", searchable: "vouched users whitelist allowlist trusted contributors" },
 	];
 
 	const q = searchQuery.toLowerCase();
@@ -339,6 +373,19 @@ function RulesPage() {
 						>
 							<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M2.5 12c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 							People
+						</button>
+						<button
+							type="button"
+							onClick={() => setTab("requests")}
+							className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${tab === "requests" ? "bg-tw-card text-white" : "text-[#FFFFFF99] hover:bg-[#ffffff08]"}`}
+						>
+							<span className="flex items-center gap-2">
+								<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3h8v6H6.5L4 11V9H3V3Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+								Requests
+							</span>
+							{pendingRequestCount > 0 && (
+								<span className="text-[11px] text-tw-accent tabular-nums">{pendingRequestCount}</span>
+							)}
 						</button>
 					</nav>
 				</div>
@@ -477,6 +524,16 @@ function RulesPage() {
 					onActionChange={(action) => updateRuleValue("cryptoAddressDetection", { action })}
 					visualization={<CryptoViz />}
 				/>
+				<RuleCardGrid
+					title="Vouched users only"
+					modalTitle="Vouched users only"
+					description="Allow contributions only from users on the whitelist (People tab)"
+					enabled={activeConfig.vouchedUsersOnly.enabled}
+					action={activeConfig.vouchedUsersOnly.action}
+					onToggle={(value) => toggleRule("vouchedUsersOnly", value)}
+					onActionChange={(action) => updateRuleValue("vouchedUsersOnly", { action })}
+					visualization={<VouchedUsersViz />}
+				/>
 						</div>
 					)}
 
@@ -517,6 +574,9 @@ function RulesPage() {
 								{activeConfig.cryptoAddressDetection.enabled && matchesSearch(allRules[8]) && (
 									<RuleCardGrid title="Crypto address detection" modalTitle="Crypto address detection" description="Block content containing cryptocurrency wallet addresses (BTC, ETH, SOL, XMR, DASH)" enabled={true} action={activeConfig.cryptoAddressDetection.action} onToggle={(v) => toggleRule("cryptoAddressDetection", v)} onActionChange={(a) => updateRuleValue("cryptoAddressDetection", { action: a })} visualization={<CryptoViz />} />
 								)}
+								{activeConfig.vouchedUsersOnly.enabled && matchesSearch(allRules[9]) && (
+									<RuleCardGrid title="Vouched users only" modalTitle="Vouched users only" description="Allow contributions only from users on the whitelist (People tab)" enabled={true} action={activeConfig.vouchedUsersOnly.action} onToggle={(v) => toggleRule("vouchedUsersOnly", v)} onActionChange={(a) => updateRuleValue("vouchedUsersOnly", { action: a })} visualization={<VouchedUsersViz />} />
+								)}
 							</div>
 						)
 					)}
@@ -552,6 +612,66 @@ function RulesPage() {
 							isAddingBlacklist={addBlacklist.isPending}
 							isAddingWhitelist={addWhitelist.isPending}
 						/>
+					)}
+
+					{tab === "requests" && (
+						<div className="flex flex-col gap-2">
+							{requestsQuery.isLoading ? (
+								<div className="rounded-xl bg-tw-card p-6">
+									<div className="h-5 w-5 animate-spin rounded-full border-2 border-tw-accent border-t-transparent" />
+								</div>
+							) : (requestsQuery.data?.length ?? 0) === 0 ? (
+								<div className="rounded-xl bg-tw-card p-6 text-center">
+									<p className="text-[13px] text-[#FFFFFF73] m-0">
+										No pending requests. Blocked users can appeal via the link in their bot comment.
+									</p>
+								</div>
+							) : (
+								requestsQuery.data!.map((r) => (
+									<div key={r.id} className="rounded-xl bg-tw-card border border-tw-border-card p-4 flex flex-col gap-3">
+										<div className="flex items-start gap-3">
+											<img
+												src={r.avatarUrl ?? `https://github.com/${r.githubUsername}.png`}
+												alt=""
+												className="w-8 h-8 rounded-full bg-white/5"
+											/>
+											<div className="flex flex-col gap-0.5 flex-1 min-w-0">
+												<div className="flex items-center gap-2">
+													<span className="text-[14px] font-medium text-white">@{r.githubUsername}</span>
+													<span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+														r.kind === "unblock"
+															? "bg-amber-500/15 text-amber-300"
+															: "bg-tw-accent/15 text-tw-accent"
+													}`}>
+														{r.kind === "unblock" ? "Appeal" : "Access"}
+													</span>
+												</div>
+												<p className="text-[13px] text-[#FFFFFFB3] m-0 whitespace-pre-wrap">{r.reason}</p>
+											</div>
+										</div>
+										<div className="flex items-center gap-2 self-end">
+											<Button
+												size="xs"
+												variant="ghost"
+												disabled={decideRequest.isPending}
+												onClick={() => decideRequest.mutate({ requestId: r.id, decision: "deny" })}
+												className="text-[12px] text-tw-text-tertiary hover:text-red-400"
+											>
+												Deny
+											</Button>
+											<Button
+												size="xs"
+												disabled={decideRequest.isPending}
+												onClick={() => decideRequest.mutate({ requestId: r.id, decision: "approve" })}
+												className="text-[12px]"
+											>
+												{r.kind === "unblock" ? "Unblock" : "Add to whitelist"}
+											</Button>
+										</div>
+									</div>
+								))
+							)}
+						</div>
 					)}
 				</div>
 			</div>

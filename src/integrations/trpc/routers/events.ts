@@ -22,6 +22,8 @@ const eventActionEnum = z.enum([
 	"whitelist_removed",
 	"blacklist_added",
 	"blacklist_removed",
+	"request_submitted",
+	"request_decided",
 	"user_blocked",
 	"bot_blacklisted",
 	"rule_triggered",

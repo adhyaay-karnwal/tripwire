@@ -761,6 +761,7 @@ function formatRuleName(ruleName: string): string {
 		maxFilesChanged: "Max files changed",
 		requireProfileReadme: "Profile README",
 		aiSlopDetection: "AI slop detection",
+		vouchedUsersOnly: "Vouched users only",
 	};
 	return names[ruleName] || ruleName;
 }

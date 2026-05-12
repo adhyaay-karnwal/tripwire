@@ -71,6 +71,7 @@ const RULE_NAMES: Record<string, string> = {
 	maxFilesChanged: "Max Files Changed",
 	repoActivityMinimum: "Repo Activity",
 	requireProfileReadme: "Profile README",
+	vouchedUsersOnly: "Vouched Users Only",
 	blacklist: "Blacklist",
 };
 

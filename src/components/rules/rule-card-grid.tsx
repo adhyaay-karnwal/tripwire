@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { RuleAction } from "#/db/schema";
 import {
 	Dialog,
@@ -19,6 +19,7 @@ export {
 	RepoActivityViz,
 	ProfileReadmeViz,
 	CryptoViz,
+	VouchedUsersViz,
 } from "../landing/visuals";
 
 const ACTION_LABELS: Record<RuleAction, string> = {
@@ -69,6 +70,29 @@ export function RuleCardGrid({
 	comingSoon,
 }: RuleCardGridProps) {
 	const [configureOpen, setConfigureOpen] = useState(false);
+	const [actionEditing, setActionEditing] = useState(false);
+	const [numericEditing, setNumericEditing] = useState(false);
+	const [numericDraft, setNumericDraft] = useState(numericConfig?.value ?? 0);
+	const numericInputRef = useRef<HTMLInputElement>(null);
+
+	useEffect(() => {
+		if (numericConfig) setNumericDraft(numericConfig.value);
+	}, [numericConfig?.value]);
+
+	useEffect(() => {
+		if (numericEditing) numericInputRef.current?.focus();
+	}, [numericEditing]);
+
+	const commitNumeric = () => {
+		if (!numericConfig) return;
+		const val = Number(numericDraft);
+		if (Number.isFinite(val) && val > 0 && val !== numericConfig.value) {
+			numericConfig.onChange(Math.floor(val));
+		} else {
+			setNumericDraft(numericConfig.value);
+		}
+		setNumericEditing(false);
+	};
 
 	const handleCardClick = (e: React.MouseEvent) => {
 		if (comingSoon) return;
@@ -111,14 +135,92 @@ export function RuleCardGrid({
 
 				{/* Action badge + numeric chip — only visible when enabled */}
 				{enabled && !comingSoon && (
-					<div className="flex items-center gap-2">
-						<span className={`text-[11px] font-medium ${ACTION_COLORS[action].active}`}>
-							{ACTION_LABELS[action]}
-						</span>
+					<div className="flex items-center gap-2" data-action-select>
+						{onActionChange && actionEditing ? (
+							<div className="flex items-center gap-1">
+								{(["block", "warn", "log"] as const).map((a) => (
+									<button
+										key={a}
+										type="button"
+										onClick={(e) => {
+											e.stopPropagation();
+											onActionChange(a);
+											setActionEditing(false);
+										}}
+										className={`px-1.5 py-0.5 rounded-md text-[11px] font-medium border transition-colors ${
+											action === a
+												? ACTION_COLORS[a].chip
+												: "bg-transparent text-tw-text-tertiary border-tw-border hover:border-tw-text-tertiary hover:text-tw-text-secondary"
+										}`}
+									>
+										{ACTION_LABELS[a]}
+									</button>
+								))}
+								<button
+									type="button"
+									onClick={(e) => {
+										e.stopPropagation();
+										setActionEditing(false);
+									}}
+									className="px-1 py-0.5 text-[11px] text-tw-text-tertiary hover:text-tw-text-secondary"
+									aria-label="Close action picker"
+								>
+									✕
+								</button>
+							</div>
+						) : (
+							<button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									if (!onActionChange) return;
+									setActionEditing(true);
+								}}
+								disabled={!onActionChange}
+								className={`text-[11px] font-medium ${ACTION_COLORS[action].active} ${
+									onActionChange ? "cursor-pointer hover:underline underline-offset-2" : ""
+								}`}
+								title={onActionChange ? "Change action" : undefined}
+							>
+								{ACTION_LABELS[action]}
+							</button>
+						)}
 						{numericConfig && (
-							<span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-tw-surface text-tw-text-secondary">
-								{numericConfig.value}
-							</span>
+							numericEditing ? (
+								<input
+									ref={numericInputRef}
+									type="number"
+									min={1}
+									value={numericDraft}
+									onChange={(e) => setNumericDraft(Number(e.target.value))}
+									onBlur={commitNumeric}
+									onKeyDown={(e) => {
+										if (e.key === "Enter") {
+											e.preventDefault();
+											commitNumeric();
+										} else if (e.key === "Escape") {
+											e.preventDefault();
+											setNumericDraft(numericConfig.value);
+											setNumericEditing(false);
+										}
+									}}
+									onClick={(e) => e.stopPropagation()}
+									className="w-14 px-2 py-0.5 rounded-md text-[11px] font-medium bg-tw-surface text-tw-text-primary border border-tw-accent/40 outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+								/>
+							) : (
+								<button
+									type="button"
+									onClick={(e) => {
+										e.stopPropagation();
+										setNumericDraft(numericConfig.value);
+										setNumericEditing(true);
+									}}
+									className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-tw-surface text-tw-text-secondary cursor-pointer hover:bg-tw-hover-light"
+									title={`Edit ${numericConfig.label.toLowerCase()}`}
+								>
+									{numericConfig.value}
+								</button>
+							)
 						)}
 					</div>
 				)}

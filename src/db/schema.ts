@@ -182,6 +182,7 @@ export type RuleConfig = {
 	repoActivityMinimum: RuleBase & { minRepos: number };
 	requireProfileReadme: RuleBase;
 	cryptoAddressDetection: RuleBase;
+	vouchedUsersOnly: RuleBase;
 };
 
 export const DEFAULT_RULE_CONFIG: RuleConfig = {
@@ -194,6 +195,7 @@ export const DEFAULT_RULE_CONFIG: RuleConfig = {
 	repoActivityMinimum: { enabled: false, action: "block", minRepos: 3 },
 	requireProfileReadme: { enabled: false, action: "block" },
 	cryptoAddressDetection: { enabled: false, action: "block" },
+	vouchedUsersOnly: { enabled: false, action: "block" },
 };
 
 export const ruleConfigs = pgTable("rule_configs", {
@@ -275,6 +277,9 @@ export type EventAction =
 	| "whitelist_removed"   // user removed from whitelist
 	| "blacklist_added"     // user added to blacklist
 	| "blacklist_removed"   // user removed from blacklist
+	// Contributor / unblock requests
+	| "request_submitted"   // a user submitted an unblock/access request
+	| "request_decided"     // a reviewer approved or denied a request
 	// Legacy (kept for backward compat with insights)
 	| "user_blocked"
 	| "bot_blacklisted"
@@ -375,6 +380,40 @@ export const conversations = pgTable(
 	(t) => [
 		index("conv_user_idx").on(t.userId),
 		index("conv_updated_idx").on(t.updatedAt),
+	],
+);
+
+/**
+ * Contributor / unblock requests submitted by GitHub users who were
+ * blocked by Tripwire or who want vouched-only access.
+ *
+ * Lifecycle: pending → approved | denied. Approval auto-mutates the
+ * whitelist (kind=access) or blacklist (kind=unblock) for that repo.
+ */
+export type RequestKind = "unblock" | "access";
+export type RequestStatus = "pending" | "approved" | "denied";
+
+export const contributorRequests = pgTable(
+	"contributor_requests",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		repoId: uuid("repo_id")
+			.notNull()
+			.references(() => repositories.id, { onDelete: "cascade" }),
+		kind: text("kind").$type<RequestKind>().notNull(),
+		githubUsername: text("github_username").notNull(),
+		githubUserId: integer("github_user_id"),
+		avatarUrl: text("avatar_url"),
+		reason: text("reason").notNull(),
+		status: text("status").$type<RequestStatus>().notNull().default("pending"),
+		decidedById: text("decided_by_id").references(() => user.id, { onDelete: "set null" }),
+		decidedAt: timestamp("decided_at"),
+		createdAt: timestamp("created_at").notNull().defaultNow(),
+	},
+	(t) => [
+		index("requests_repo_idx").on(t.repoId),
+		index("requests_status_idx").on(t.status),
+		index("requests_repo_user_idx").on(t.repoId, t.githubUsername),
 	],
 );
 

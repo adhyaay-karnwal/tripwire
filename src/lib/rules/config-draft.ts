@@ -29,6 +29,7 @@ languageRequirement: "Language requirement",
 	repoActivityMinimum: "Repo activity minimum",
 	requireProfileReadme: "Require profile README",
 	cryptoAddressDetection: "Crypto address detection",
+	vouchedUsersOnly: "Vouched users only",
 };
 
 const ACTION_LABELS: Record<RuleAction, string> = {
@@ -48,6 +49,7 @@ languageRequirement: ["enabled", "action", "language", "thresholdCount"],
 	repoActivityMinimum: ["enabled", "action", "minRepos", "thresholdCount"],
 	requireProfileReadme: ["enabled", "action", "thresholdCount"],
 	cryptoAddressDetection: ["enabled", "action", "thresholdCount"],
+	vouchedUsersOnly: ["enabled", "action", "thresholdCount"],
 };
 
 function formatScalar(value: unknown): string {
@@ -190,6 +192,7 @@ languageRequirement: { ...DEFAULT_RULE_CONFIG.languageRequirement, ...raw?.langu
 		repoActivityMinimum: { ...DEFAULT_RULE_CONFIG.repoActivityMinimum, ...raw?.repoActivityMinimum },
 		requireProfileReadme: { ...DEFAULT_RULE_CONFIG.requireProfileReadme, ...raw?.requireProfileReadme },
 		cryptoAddressDetection: { ...DEFAULT_RULE_CONFIG.cryptoAddressDetection, ...raw?.cryptoAddressDetection },
+		vouchedUsersOnly: { ...DEFAULT_RULE_CONFIG.vouchedUsersOnly, ...raw?.vouchedUsersOnly },
 	};
 }
 
