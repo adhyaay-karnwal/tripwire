@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { authedProcedure, publicProcedure } from "../init";
+import { assertRepoOwner, assertRequestOwner, authedProcedure, publicProcedure } from "../init";
 import { trpcError } from "../error";
 import { db } from "#/db";
 import {
@@ -167,7 +167,8 @@ export const requestsRouter = {
 				status: z.enum(["pending", "approved", "denied"]).optional(),
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			const conds = [eq(contributorRequests.repoId, input.repoId)];
 			if (input.status) conds.push(eq(contributorRequests.status, input.status));
 			return db
@@ -185,19 +186,8 @@ export const requestsRouter = {
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
-			const [req] = await db
-				.select()
-				.from(contributorRequests)
-				.where(eq(contributorRequests.id, input.requestId))
-				.limit(1);
-			if (!req) {
-				throw trpcError({
-					code: "requests.not_found",
-					status: 404,
-					message: "Request not found.",
-					internal: { requestId: input.requestId },
-				});
-			}
+			const { request: req } = await assertRequestOwner(ctx.user.id, input.requestId);
+
 			if (req.status !== "pending") {
 				throw trpcError({
 					code: "requests.already_decided",

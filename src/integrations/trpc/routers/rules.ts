@@ -1,14 +1,13 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { authedProcedure } from "../init";
-import { trpcError } from "../error";
+import { authedProcedure, assertRepoOwner } from "../init";
 import { db } from "#/db";
 import {
 	ruleConfigs,
 	whitelistEntries,
 	blacklistEntries,
-	repositories,
 	organizations,
+	repositories,
 	DEFAULT_RULE_CONFIG,
 	type RuleConfig,
 } from "#/db/schema";
@@ -25,11 +24,15 @@ import {
 
 import type { TRPCRouterRecord } from "@trpc/server";
 
+type RepoRow = typeof repositories.$inferSelect;
+type OrgRow = typeof organizations.$inferSelect;
+
 export const rulesRouter = {
 	/** Get rule config for a repo */
 	getConfig: authedProcedure
 		.input(z.object({ repoId: z.string().uuid() }))
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			const [config] = await db
 				.select()
 				.from(ruleConfigs)
@@ -46,6 +49,8 @@ export const rulesRouter = {
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			const { repo, org } = await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const [existing] = await db
 				.select()
 				.from(ruleConfigs)
@@ -102,10 +107,10 @@ export const rulesRouter = {
 			// Auto-sync repo files when their toggles are on. Errors are
 			// logged but don't fail the save — these are best-effort writes.
 			if (nextConfig.repoFiles.rulesMd.autoSync) {
-				void syncRepoFileSafe(input.repoId, "rules-md", nextConfig);
+				void syncRepoFileSafe(repo, org, "rules-md", nextConfig);
 			}
 			if (nextConfig.repoFiles.prTemplate.autoSync) {
-				void syncRepoFileSafe(input.repoId, "pr-template", nextConfig);
+				void syncRepoFileSafe(repo, org, "pr-template", nextConfig);
 			}
 
 			return nextConfig;
@@ -120,7 +125,8 @@ export const rulesRouter = {
 				content: z.string().max(50_000),
 			}),
 		)
-		.mutation(async ({ input }) => {
+		.mutation(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			const [existing] = await db
 				.select()
 				.from(ruleConfigs)
@@ -161,20 +167,22 @@ export const rulesRouter = {
 				kind: z.enum(["rules-md", "pr-template"]),
 			}),
 		)
-		.mutation(async ({ input }) => {
+		.mutation(async ({ input, ctx }) => {
+			const { repo, org } = await assertRepoOwner(ctx.user.id, input.repoId);
 			const [configRow] = await db
 				.select()
 				.from(ruleConfigs)
 				.where(eq(ruleConfigs.repoId, input.repoId));
 			const config = normalizeRuleConfig(configRow?.config ?? DEFAULT_RULE_CONFIG);
-			const result = await syncRepoFile(input.repoId, input.kind, config);
+			const result = await syncRepoFile(repo, org, input.kind, config);
 			return result;
 		}),
 
 	/** Count enabled rules for a repo */
 	countEnabled: authedProcedure
 		.input(z.object({ repoId: z.string().uuid() }))
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			const [configRow] = await db
 				.select()
 				.from(ruleConfigs)
@@ -197,7 +205,8 @@ export const rulesRouter = {
 	/** Export config as JSON (for copy-to-another-repo) */
 	exportConfig: authedProcedure
 		.input(z.object({ repoId: z.string().uuid() }))
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			const [config] = await db
 				.select()
 				.from(ruleConfigs)
@@ -230,7 +239,8 @@ export const rulesRouter = {
 				blacklist: z.array(z.string()).optional(),
 			}),
 		)
-		.mutation(async ({ input }) => {
+		.mutation(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			// Upsert rule config
 			const [existing] = await db
 				.select()
@@ -258,41 +268,12 @@ export const rulesRouter = {
 type RepoFileKind = "rules-md" | "pr-template";
 
 async function syncRepoFile(
-	repoId: string,
+	repo: RepoRow,
+	org: OrgRow,
 	kind: RepoFileKind,
 	config: RuleConfig,
 ): Promise<{ kind: RepoFileKind; path: string }> {
-	const [repo] = await db
-		.select({
-			fullName: repositories.fullName,
-			orgId: repositories.orgId,
-		})
-		.from(repositories)
-		.where(eq(repositories.id, repoId));
-	if (!repo) {
-		throw trpcError({
-			code: "repo.not_found",
-			status: 404,
-			message: "Repository not found.",
-			internal: { repoId },
-		});
-	}
-	const [org] = await db
-		.select({ installationId: organizations.githubInstallationId })
-		.from(organizations)
-		.where(eq(organizations.id, repo.orgId));
-	if (!org) {
-		throw trpcError({
-			code: "github.installation_missing",
-			status: 404,
-			message: "GitHub installation not found.",
-			why: "The org row references no GitHub installation — Tripwire was likely uninstalled.",
-			fix: "Reinstall the Tripwire GitHub App on this organization.",
-			internal: { repoId, orgId: repo.orgId },
-		});
-	}
-
-	const token = await getInstallationToken(org.installationId);
+	const token = await getInstallationToken(org.githubInstallationId);
 	const [owner, repoName] = repo.fullName.split("/");
 
 	if (kind === "rules-md") {
@@ -314,14 +295,15 @@ async function syncRepoFile(
 }
 
 async function syncRepoFileSafe(
-	repoId: string,
+	repo: RepoRow,
+	org: OrgRow,
 	kind: RepoFileKind,
 	config: RuleConfig,
 ): Promise<void> {
 	try {
-		await syncRepoFile(repoId, kind, config);
+		await syncRepoFile(repo, org, kind, config);
 	} catch (err) {
-		console.error(`[repo-files] auto-sync ${kind} failed for ${repoId}:`, err);
+		console.error(`[repo-files] auto-sync ${kind} failed for ${repo.id}:`, err);
 	}
 }
 

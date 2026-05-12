@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
-import { authedProcedure } from "../init";
+import { authedProcedure, assertRepoOwner } from "../init";
 import { trpcError } from "../error";
 import { db } from "#/db";
-import { whitelistEntries, blacklistEntries, repositories, organizations } from "#/db/schema";
+import { whitelistEntries, blacklistEntries } from "#/db/schema";
 import { logEvent } from "#/lib/events";
 import { getInstallationToken, getRepoContributors } from "#/lib/github/github-api";
 
@@ -48,7 +48,8 @@ async function validateGitHubUser(username: string): Promise<{
 export const whitelistRouter = {
 	list: authedProcedure
 		.input(z.object({ repoId: z.string().uuid() }))
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			return db
 				.select()
 				.from(whitelistEntries)
@@ -63,6 +64,7 @@ export const whitelistRouter = {
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			const ghUser = await validateGitHubUser(input.githubUsername);
 
 			// Check if user is on the blacklist
@@ -138,6 +140,7 @@ export const whitelistRouter = {
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			await db
 				.delete(whitelistEntries)
 				.where(
@@ -161,30 +164,22 @@ export const whitelistRouter = {
 
 	suggestedContributors: authedProcedure
 		.input(z.object({ repoId: z.string().uuid() }))
-		.query(async ({ input }) => {
-			// Look up repo → org → installation token
-			const [repo] = await db.select({ orgId: repositories.orgId, fullName: repositories.fullName }).from(repositories).where(eq(repositories.id, input.repoId)).limit(1);
-			if (!repo) return [];
-
-			const [org] = await db.select({ installationId: organizations.githubInstallationId }).from(organizations).where(eq(organizations.id, repo.orgId)).limit(1);
-			if (!org) return [];
+		.query(async ({ input, ctx }) => {
+			const { repo, org } = await assertRepoOwner(ctx.user.id, input.repoId);
 
 			let token: string;
 			try {
-				token = await getInstallationToken(org.installationId);
+				token = await getInstallationToken(org.githubInstallationId);
 			} catch {
 				return [];
 			}
 
-			// Get contributors from GitHub
 			const contributors = await getRepoContributors(token, repo.fullName);
 			if (contributors.length === 0) return [];
 
-			// Get existing whitelist
 			const existing = await db.select({ username: whitelistEntries.githubUsername }).from(whitelistEntries).where(eq(whitelistEntries.repoId, input.repoId));
 			const whitelisted = new Set(existing.map((e) => e.username.toLowerCase()));
 
-			// Filter out already whitelisted
 			return contributors
 				.filter((c) => !whitelisted.has(c.login.toLowerCase()))
 				.map((c) => ({ username: c.login, avatarUrl: c.avatarUrl, contributions: c.contributions }));
@@ -194,7 +189,8 @@ export const whitelistRouter = {
 export const blacklistRouter = {
 	list: authedProcedure
 		.input(z.object({ repoId: z.string().uuid() }))
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			return db
 				.select()
 				.from(blacklistEntries)
@@ -209,6 +205,7 @@ export const blacklistRouter = {
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			const ghUser = await validateGitHubUser(input.githubUsername);
 
 			// Check if already blacklisted
@@ -263,6 +260,7 @@ export const blacklistRouter = {
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
 			await db
 				.delete(blacklistEntries)
 				.where(

@@ -1,7 +1,16 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import superjson from 'superjson'
 import { EvlogError } from 'evlog'
+import { and, eq } from 'drizzle-orm'
 import { auth } from '#/lib/auth'
+import { db } from '#/db'
+import {
+  contributorRequests,
+  events,
+  organizations,
+  repositories,
+} from '#/db/schema'
+import { trpcError } from './error'
 
 export interface TRPCContext {
   headers: Headers
@@ -63,3 +72,60 @@ const authMiddleware = t.middleware(async ({ ctx, next }) => {
 })
 
 export const authedProcedure = t.procedure.use(authMiddleware)
+
+const NOT_FOUND = () =>
+  trpcError({ code: 'resource.not_found', status: 404, message: 'Not found' })
+
+export async function assertOrgOwner(userId: string, orgId: string) {
+  const [row] = await db
+    .select({ org: organizations })
+    .from(organizations)
+    .where(and(eq(organizations.id, orgId), eq(organizations.ownerId, userId)))
+    .limit(1)
+  if (!row) throw NOT_FOUND()
+  return row.org
+}
+
+export async function assertRepoOwner(userId: string, repoId: string) {
+  const [row] = await db
+    .select({ repo: repositories, org: organizations })
+    .from(repositories)
+    .innerJoin(organizations, eq(repositories.orgId, organizations.id))
+    .where(and(eq(repositories.id, repoId), eq(organizations.ownerId, userId)))
+    .limit(1)
+  if (!row) throw NOT_FOUND()
+  return row
+}
+
+export async function assertEventOwner(userId: string, eventId: string) {
+  const [row] = await db
+    .select({ event: events, repo: repositories, org: organizations })
+    .from(events)
+    .innerJoin(repositories, eq(events.repoId, repositories.id))
+    .innerJoin(organizations, eq(repositories.orgId, organizations.id))
+    .where(and(eq(events.id, eventId), eq(organizations.ownerId, userId)))
+    .limit(1)
+  if (!row) throw NOT_FOUND()
+  return row
+}
+
+export async function assertRequestOwner(userId: string, requestId: string) {
+  const [row] = await db
+    .select({
+      request: contributorRequests,
+      repo: repositories,
+      org: organizations,
+    })
+    .from(contributorRequests)
+    .innerJoin(repositories, eq(contributorRequests.repoId, repositories.id))
+    .innerJoin(organizations, eq(repositories.orgId, organizations.id))
+    .where(
+      and(
+        eq(contributorRequests.id, requestId),
+        eq(organizations.ownerId, userId),
+      ),
+    )
+    .limit(1)
+  if (!row) throw NOT_FOUND()
+  return row
+}

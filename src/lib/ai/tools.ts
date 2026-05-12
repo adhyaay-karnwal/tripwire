@@ -28,6 +28,7 @@ import {
 	getInstallationToken,
 } from "#/lib/github/github-api";
 import { computeContributorScore } from "#/lib/ai/contributor-score";
+import { assertRepoOwner } from "#/integrations/trpc/init";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -344,6 +345,7 @@ export function createTripwireTools(ctx: ToolContext) {
 	return [
 		// ─── Lookup User ────────────────────────────────────────
 		lookupUserDef.server(async ({ username }) => {
+			await assertRepoOwner(userId, repoId);
 			// Get installation token for authenticated API calls
 			const token = await getTokenForRepo(repoId);
 
@@ -468,6 +470,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Get Event ──────────────────────────────────────────
 		getEventDef.server(async ({ eventId }) => {
+			await assertRepoOwner(userId, repoId);
 			const [event] = await db
 				.select()
 				.from(events)
@@ -499,6 +502,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── List Events ────────────────────────────────────────
 		listEventsDef.server(async ({ username, action, severity, limit }) => {
+			await assertRepoOwner(userId, repoId);
 			const conditions = [eq(events.repoId, repoId)];
 
 			if (username) {
@@ -539,6 +543,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Get Lists ──────────────────────────────────────────
 		getListsDef.server(async () => {
+			await assertRepoOwner(userId, repoId);
 			const [blacklist, whitelist] = await Promise.all([
 				db
 					.select()
@@ -576,6 +581,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Get Blacklist ──────────────────────────────────────
 		getBlacklistDef.server(async () => {
+			await assertRepoOwner(userId, repoId);
 			const blacklist = await db
 				.select()
 				.from(blacklistEntries)
@@ -594,6 +600,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Get Whitelist ──────────────────────────────────────
 		getWhitelistDef.server(async () => {
+			await assertRepoOwner(userId, repoId);
 			const whitelist = await db
 				.select()
 				.from(whitelistEntries)
@@ -612,6 +619,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Check Lists ────────────────────────────────────────
 		checkListsDef.server(async ({ username }) => {
+			await assertRepoOwner(userId, repoId);
 			const [whitelist, blacklist] = await Promise.all([
 				db
 					.select()
@@ -646,6 +654,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Add to Blacklist ───────────────────────────────────
 		addToBlacklistDef.server(async ({ username }) => {
+			await assertRepoOwner(userId, repoId);
 			const ghUser = await fetchGitHubUser(username);
 
 			const [whitelisted] = await db
@@ -713,6 +722,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Remove from Blacklist ──────────────────────────────
 		removeFromBlacklistDef.server(async ({ username }) => {
+			await assertRepoOwner(userId, repoId);
 			await db
 				.delete(blacklistEntries)
 				.where(
@@ -740,6 +750,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Add to Whitelist ───────────────────────────────────
 		addToWhitelistDef.server(async ({ username }) => {
+			await assertRepoOwner(userId, repoId);
 			const ghUser = await fetchGitHubUser(username);
 
 			const [blacklisted] = await db
@@ -807,6 +818,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Remove from Whitelist ──────────────────────────────
 		removeFromWhitelistDef.server(async ({ username }) => {
+			await assertRepoOwner(userId, repoId);
 			await db
 				.delete(whitelistEntries)
 				.where(
@@ -834,6 +846,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Move to Whitelist ──────────────────────────────────
 		moveToWhitelistDef.server(async ({ username }) => {
+			await assertRepoOwner(userId, repoId);
 			const ghUser = await fetchGitHubUser(username);
 
 			// Remove from blacklist if present
@@ -887,6 +900,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Move to Blacklist ──────────────────────────────────
 		moveToBlacklistDef.server(async ({ username }) => {
+			await assertRepoOwner(userId, repoId);
 			const ghUser = await fetchGitHubUser(username);
 
 			// Remove from whitelist if present
@@ -940,6 +954,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Get Rule Config ────────────────────────────────────
 		getRuleConfigDef.server(async () => {
+			await assertRepoOwner(userId, repoId);
 			const [configRow] = await db
 				.select()
 				.from(ruleConfigs)
@@ -970,6 +985,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Toggle Rule ────────────────────────────────────────
 		toggleRuleDef.server(async ({ ruleId, enabled }) => {
+			await assertRepoOwner(userId, repoId);
 			const [configRow] = await db
 				.select()
 				.from(ruleConfigs)
@@ -1017,6 +1033,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Update Rule Action ─────────────────────────────────
 		updateRuleActionDef.server(async ({ ruleId, action, thresholdCount }) => {
+			await assertRepoOwner(userId, repoId);
 			const [configRow] = await db
 				.select()
 				.from(ruleConfigs)
@@ -1068,6 +1085,7 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Update Rule Value ──────────────────────────────────
 		updateRuleValueDef.server(async ({ ruleId, field, value }) => {
+			await assertRepoOwner(userId, repoId);
 			const [configRow] = await db
 				.select()
 				.from(ruleConfigs)
@@ -1124,10 +1142,16 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Reputation Leaderboard ─────────────────────────────
 		getReputationLeaderboardDef.server(async ({ limit }) => {
+			await assertRepoOwner(userId, repoId);
 			const rows = await db
 				.select()
 				.from(githubReputation)
-				.where(sql`${githubReputation.totalBlocks} > 0`)
+				.where(
+					and(
+						eq(githubReputation.repoId, repoId),
+						sql`${githubReputation.totalBlocks} > 0`,
+					),
+				)
 				.orderBy(desc(githubReputation.totalBlocks))
 				.limit(limit ?? 10);
 

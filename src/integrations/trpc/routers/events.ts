@@ -1,9 +1,8 @@
 import { z } from "zod";
 import { eq, desc, sql, and, gte, inArray, isNotNull } from "drizzle-orm";
-import { trpcError } from "../error";
-import { authedProcedure } from "../init";
+import { authedProcedure, assertEventOwner, assertRepoOwner } from "../init";
 import { db } from "#/db";
-import { events, repositories } from "#/db/schema";
+import { events } from "#/db/schema";
 
 import type { TRPCRouterRecord } from "@trpc/server";
 
@@ -35,34 +34,20 @@ export const eventsRouter = {
 	/** Get a single event by ID */
 	get: authedProcedure
 		.input(z.object({ eventId: z.string().uuid() }))
-		.query(async ({ input }) => {
-			const [event] = await db
-				.select()
-				.from(events)
-				.where(eq(events.id, input.eventId))
-				.limit(1);
+		.query(async ({ ctx, input }) => {
+			const { event, repo } = await assertEventOwner(
+				ctx.user.id,
+				input.eventId,
+			);
 
-			if (!event) {
-				throw trpcError({
-					code: "events.not_found",
-					status: 404,
-					message: "Event not found",
-					internal: { eventId: input.eventId },
-				});
-			}
-
-			// Fetch repo info
-			const [repo] = await db
-				.select({
-					id: repositories.id,
-					name: repositories.name,
-					fullName: repositories.fullName,
-				})
-				.from(repositories)
-				.where(eq(repositories.id, event.repoId))
-				.limit(1);
-
-			return { ...event, repo };
+			return {
+				...event,
+				repo: {
+					id: repo.id,
+					name: repo.name,
+					fullName: repo.fullName,
+				},
+			};
 		}),
 
 	/** Get digest events for the home page - recent flagged/blocked events grouped by user */
@@ -74,7 +59,9 @@ export const eventsRouter = {
 				hours: z.number().int().min(1).max(168).default(24), // up to 7 days
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const since = new Date();
 			since.setHours(since.getHours() - input.hours);
 
@@ -157,7 +144,9 @@ export const eventsRouter = {
 				since: z.string().datetime().optional(),
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const conditions = [eq(events.repoId, input.repoId)];
 
 			if (input.actions && input.actions.length > 0) {
@@ -201,7 +190,9 @@ export const eventsRouter = {
 	/** Aggregated stats for the Insights page (backward compatible) */
 	stats: authedProcedure
 		.input(z.object({ repoId: z.string().uuid() }))
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const thirtyDaysAgo = new Date();
 			thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -252,7 +243,9 @@ export const eventsRouter = {
 				months: z.number().int().min(1).max(12).default(8),
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const startDate = new Date();
 			startDate.setMonth(startDate.getMonth() - input.months);
 
@@ -293,7 +286,9 @@ export const eventsRouter = {
 				days: z.number().int().min(1).max(90).default(7),
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const since = new Date();
 			since.setDate(since.getDate() - input.days);
 
@@ -328,7 +323,9 @@ export const eventsRouter = {
 				days: z.number().int().min(1).max(90).default(30),
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const since = new Date();
 			since.setDate(since.getDate() - input.days);
 
@@ -360,7 +357,9 @@ export const eventsRouter = {
 				days: z.number().int().min(1).max(90).default(30),
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const since = new Date();
 			since.setDate(since.getDate() - input.days);
 
@@ -403,7 +402,9 @@ export const eventsRouter = {
 				days: z.number().int().min(1).max(90).default(30),
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			await assertRepoOwner(ctx.user.id, input.repoId);
+
 			const since = new Date();
 			since.setDate(since.getDate() - input.days);
 

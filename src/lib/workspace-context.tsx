@@ -7,7 +7,6 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "./auth-client";
-import { useAuth } from "./auth-context";
 import { useTRPC } from "#/integrations/trpc/react";
 
 interface Repo {
@@ -44,7 +43,6 @@ const WorkspaceContext = createContext<WorkspaceContextValue>({
 });
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-	const { user } = useAuth();
 	const trpc = useTRPC();
 	const [org, setOrg] = useState<Org | null>(null);
 	const [repo, setRepo] = useState<Repo | null>(null);
@@ -61,9 +59,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 	}));
 
 	// Fetch Tripwire repos for the user (across all their GitHub installations)
-	const reposQuery = useQuery(
-		trpc.orgs.myRepos.queryOptions({ userId: user.id }),
-	);
+	const reposQuery = useQuery(trpc.orgs.myRepos.queryOptions());
 
 	const repos: Repo[] = (reposQuery.data ?? []).map((r) => ({
 		id: r.id,
