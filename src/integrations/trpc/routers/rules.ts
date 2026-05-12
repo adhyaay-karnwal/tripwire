@@ -23,7 +23,6 @@ const ruleBaseSchema = z.object({
 
 const ruleConfigSchema = z.object({
 	aiSlopDetection: ruleBaseSchema,
-	requireProfilePicture: ruleBaseSchema,
 	languageRequirement: ruleBaseSchema.extend({
 		language: z.string(),
 	}),
