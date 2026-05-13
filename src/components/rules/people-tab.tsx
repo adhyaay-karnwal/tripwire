@@ -20,9 +20,9 @@ interface PeopleTabProps {
 	whitelistUsers: PeopleUser[];
 	suggestedContributors?: SuggestedContributor[];
 	onAddBlacklist: (username: string, reason?: string) => Promise<void>;
-	onRemoveBlacklist: (username: string) => void;
+	onRemoveBlacklist: (username: string) => Promise<void>;
 	onAddWhitelist: (username: string, reason?: string) => Promise<void>;
-	onRemoveWhitelist: (username: string) => void;
+	onRemoveWhitelist: (username: string) => Promise<void>;
 	isAddingBlacklist?: boolean;
 	isAddingWhitelist?: boolean;
 }
@@ -69,22 +69,41 @@ export function PeopleTab({
 		}
 	};
 
-	const handleMove = (user: PeopleUser) => {
-		if (subtab === "block") {
-			onRemoveBlacklist(user.username);
-			onAddWhitelist(user.username).catch(() => {});
-		} else {
-			onRemoveWhitelist(user.username);
-			onAddBlacklist(user.username).catch(() => {});
+	const handleMove = async (user: PeopleUser) => {
+		const fromLabel = subtab === "block" ? "blocklist" : "allowlist";
+		const toLabel = subtab === "block" ? "allowlist" : "blocklist";
+		const removeFromSource = subtab === "block" ? onRemoveBlacklist : onRemoveWhitelist;
+		const addToDest = subtab === "block" ? onAddWhitelist : onAddBlacklist;
+		const revertAddToSource = subtab === "block" ? onAddBlacklist : onAddWhitelist;
+
+		try {
+			await removeFromSource(user.username);
+		} catch (err) {
+			toastFromError(err, { fallbackTitle: `Failed to remove from ${fromLabel}` });
+			return;
+		}
+
+		try {
+			await addToDest(user.username);
+		} catch (err) {
+			toastFromError(err, { fallbackTitle: `Failed to add to ${toLabel}` });
+			// Best-effort revert: re-add to source list so the user isn't left on neither.
+			try {
+				await revertAddToSource(user.username);
+			} catch (revertErr) {
+				toastFromError(revertErr, {
+					fallbackTitle: `Failed to restore user to ${fromLabel} after move error`,
+				});
+			}
 		}
 	};
 
 	const handleRemove = (user: PeopleUser) => {
-		if (subtab === "block") {
-			onRemoveBlacklist(user.username);
-		} else {
-			onRemoveWhitelist(user.username);
-		}
+		const remove = subtab === "block" ? onRemoveBlacklist : onRemoveWhitelist;
+		const fromLabel = subtab === "block" ? "blocklist" : "allowlist";
+		remove(user.username).catch((err) => {
+			toastFromError(err, { fallbackTitle: `Failed to remove from ${fromLabel}` });
+		});
 	};
 
 	const blockColor = "rgb(245, 109, 93)";

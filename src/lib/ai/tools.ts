@@ -11,9 +11,11 @@ import {
 	organizations,
 	githubReputation,
 	DEFAULT_RULE_CONFIG,
+	RULE_KEYS,
 	type EventAction,
 	type RuleConfig,
 } from "#/db/schema";
+import { ruleConfigSchema } from "#/lib/rules/config-schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { logEvent } from "#/lib/events";
 import {
@@ -226,10 +228,10 @@ function getRuleDetail(ruleId: string, config: Record<string, unknown>): string 
 	return undefined;
 }
 
-// contentScope is structural (not a rule), exclude it from AI tool surface.
-const VALID_RULE_IDS = Object.keys(DEFAULT_RULE_CONFIG)
-	.filter((k) => k !== "contentScope")
-	.join(", ");
+// Structural keys (contentScope, repoFiles) are excluded — only actual rules
+// are exposed to the AI tool surface.
+const VALID_RULE_IDS = new Set<string>(RULE_KEYS);
+const VALID_RULE_IDS_LIST = RULE_KEYS.join(", ");
 
 export const getRuleConfigDef = toolDefinition({
 	name: "get_rule_config",
@@ -242,7 +244,7 @@ export const getRuleConfigDef = toolDefinition({
 export const toggleRuleDef = toolDefinition({
 	name: "toggle_rule",
 	description:
-		`Enable or disable a specific rule. Valid ruleIds: ${VALID_RULE_IDS}.`,
+		`Enable or disable a specific rule. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
 	inputSchema: z.object({
 		ruleId: z.string(),
 		enabled: z.boolean(),
@@ -254,7 +256,7 @@ export const toggleRuleDef = toolDefinition({
 export const updateRuleActionDef = toolDefinition({
 	name: "update_rule_action",
 	description:
-		`Change a rule's action level. Actions: 'block' (close PR/issue), 'warn' (leave comment), 'log' (record silently), 'threshold' (ignore until N violations then block). Valid ruleIds: ${VALID_RULE_IDS}.`,
+		`Change a rule's action level. Actions: 'block' (close PR/issue), 'warn' (leave comment), 'log' (record silently), 'threshold' (ignore until N violations then block). Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
 	inputSchema: z.object({
 		ruleId: z.string(),
 		action: z.enum(["block", "warn", "log", "threshold"]),
@@ -267,7 +269,7 @@ export const updateRuleActionDef = toolDefinition({
 export const updateRuleValueDef = toolDefinition({
 	name: "update_rule_value",
 	description:
-		`Set a rule's numeric or string parameter. Valid fields per rule: minMergedPrs.count, accountAge.days, maxPrsPerDay.limit, maxFilesChanged.limit, repoActivityMinimum.minRepos, languageRequirement.language. Valid ruleIds: ${VALID_RULE_IDS}.`,
+		`Set a rule's numeric or string parameter. Valid fields per rule: minMergedPrs.count, accountAge.days, maxPrsPerDay.limit, maxFilesChanged.limit, repoActivityMinimum.minRepos, languageRequirement.language. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
 	inputSchema: z.object({
 		ruleId: z.string().meta({ description: "The rule ID (e.g. 'minMergedPrs', 'accountAge')" }),
 		field: z.string().meta({ description: "The field to update (e.g. 'count', 'days', 'limit', 'minRepos', 'language')" }),
@@ -849,37 +851,33 @@ export function createTripwireTools(ctx: ToolContext) {
 			await assertRepoOwner(userId, repoId);
 			const ghUser = await fetchGitHubUser(username);
 
-			// Remove from blacklist if present
-			await db
-				.delete(blacklistEntries)
-				.where(
-					and(
-						eq(blacklistEntries.repoId, repoId),
-						usernameEq(blacklistEntries.githubUsername, username),
-					),
-				);
+			// Atomic move: delete-from-blacklist + insert-into-whitelist in one tx.
+			// Insert uses ON CONFLICT DO NOTHING against whitelist_repo_username_uniq;
+			// if the user was already on the destination list, the insert silently no-ops.
+			const inserted = await db.transaction(async (tx) => {
+				await tx
+					.delete(blacklistEntries)
+					.where(
+						and(
+							eq(blacklistEntries.repoId, repoId),
+							usernameEq(blacklistEntries.githubUsername, username),
+						),
+					);
 
-			// Check if already whitelisted
-			const [existing] = await db
-				.select()
-				.from(whitelistEntries)
-				.where(
-					and(
-						eq(whitelistEntries.repoId, repoId),
-						eq(whitelistEntries.githubUsername, ghUser.login),
-					),
-				)
-				.limit(1);
+				const rows = await tx
+					.insert(whitelistEntries)
+					.values({
+						repoId,
+						githubUsername: ghUser.login,
+						githubUserId: ghUser.id,
+						avatarUrl: ghUser.avatar_url,
+						addedById: userId,
+					})
+					.onConflictDoNothing()
+					.returning({ id: whitelistEntries.id });
 
-			if (!existing) {
-				await db.insert(whitelistEntries).values({
-					repoId,
-					githubUsername: ghUser.login,
-					githubUserId: ghUser.id,
-					avatarUrl: ghUser.avatar_url,
-					addedById: userId,
-				});
-			}
+				return rows.length > 0;
+			});
 
 			await logEvent({
 				repoId,
@@ -888,12 +886,14 @@ export function createTripwireTools(ctx: ToolContext) {
 				description: `@${ghUser.login} was moved to the whitelist by AI assistant`,
 				targetGithubUsername: ghUser.login,
 				targetGithubUserId: ghUser.id,
-				metadata: { addedBy: userName, viaAI: true, movedFrom: "blacklist" },
+				metadata: { addedBy: userName, viaAI: true, movedFrom: "blacklist", alreadyOnList: !inserted },
 			});
 
 			return makeSpec("ActionResult", {
 				success: true,
-				message: `@${ghUser.login} has been moved to the whitelist.`,
+				message: inserted
+					? `@${ghUser.login} has been moved to the whitelist.`
+					: `@${ghUser.login} was already on the whitelist; removed from the blacklist.`,
 				action: "move_to_whitelist",
 			});
 		}),
@@ -903,37 +903,33 @@ export function createTripwireTools(ctx: ToolContext) {
 			await assertRepoOwner(userId, repoId);
 			const ghUser = await fetchGitHubUser(username);
 
-			// Remove from whitelist if present
-			await db
-				.delete(whitelistEntries)
-				.where(
-					and(
-						eq(whitelistEntries.repoId, repoId),
-						usernameEq(whitelistEntries.githubUsername, username),
-					),
-				);
+			// Atomic move: delete-from-whitelist + insert-into-blacklist in one tx.
+			// Insert uses ON CONFLICT DO NOTHING against blacklist_repo_username_uniq;
+			// if the user was already on the destination list, the insert silently no-ops.
+			const inserted = await db.transaction(async (tx) => {
+				await tx
+					.delete(whitelistEntries)
+					.where(
+						and(
+							eq(whitelistEntries.repoId, repoId),
+							usernameEq(whitelistEntries.githubUsername, username),
+						),
+					);
 
-			// Check if already blacklisted
-			const [existing] = await db
-				.select()
-				.from(blacklistEntries)
-				.where(
-					and(
-						eq(blacklistEntries.repoId, repoId),
-						eq(blacklistEntries.githubUsername, ghUser.login),
-					),
-				)
-				.limit(1);
+				const rows = await tx
+					.insert(blacklistEntries)
+					.values({
+						repoId,
+						githubUsername: ghUser.login,
+						githubUserId: ghUser.id,
+						avatarUrl: ghUser.avatar_url,
+						addedById: userId,
+					})
+					.onConflictDoNothing()
+					.returning({ id: blacklistEntries.id });
 
-			if (!existing) {
-				await db.insert(blacklistEntries).values({
-					repoId,
-					githubUsername: ghUser.login,
-					githubUserId: ghUser.id,
-					avatarUrl: ghUser.avatar_url,
-					addedById: userId,
-				});
-			}
+				return rows.length > 0;
+			});
 
 			await logEvent({
 				repoId,
@@ -942,12 +938,14 @@ export function createTripwireTools(ctx: ToolContext) {
 				description: `@${ghUser.login} was moved to the blacklist by AI assistant`,
 				targetGithubUsername: ghUser.login,
 				targetGithubUserId: ghUser.id,
-				metadata: { addedBy: userName, viaAI: true, movedFrom: "whitelist" },
+				metadata: { addedBy: userName, viaAI: true, movedFrom: "whitelist", alreadyOnList: !inserted },
 			});
 
 			return makeSpec("ActionResult", {
 				success: true,
-				message: `@${ghUser.login} has been moved to the blacklist. All their future contributions will be blocked.`,
+				message: inserted
+					? `@${ghUser.login} has been moved to the blacklist. All their future contributions will be blocked.`
+					: `@${ghUser.login} was already on the blacklist; removed from the whitelist.`,
 				action: "move_to_blacklist",
 			});
 		}),
@@ -986,6 +984,15 @@ export function createTripwireTools(ctx: ToolContext) {
 		// ─── Toggle Rule ────────────────────────────────────────
 		toggleRuleDef.server(async ({ ruleId, enabled }) => {
 			await assertRepoOwner(userId, repoId);
+
+			if (!VALID_RULE_IDS.has(ruleId)) {
+				return makeSpec("ActionResult", {
+					success: false,
+					message: `Unknown rule: ${ruleId}. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
+					action: "toggle_rule",
+				});
+			}
+
 			const [configRow] = await db
 				.select()
 				.from(ruleConfigs)
@@ -994,17 +1001,20 @@ export function createTripwireTools(ctx: ToolContext) {
 
 			const config = { ...(configRow?.config ?? DEFAULT_RULE_CONFIG) } as Record<string, Record<string, unknown>>;
 
-			if (!(ruleId in config)) {
+			config[ruleId] = { ...config[ruleId], enabled };
+
+			const parsed = ruleConfigSchema.safeParse(config);
+			if (!parsed.success) {
+				const issue = parsed.error.issues[0];
+				const path = issue?.path.join(".") ?? "config";
 				return makeSpec("ActionResult", {
 					success: false,
-					message: `Unknown rule: ${ruleId}`,
+					message: `Invalid rule config: ${path} — ${issue?.message ?? "validation failed"}.`,
 					action: "toggle_rule",
 				});
 			}
 
-			config[ruleId] = { ...config[ruleId], enabled };
-
-			const nextConfig = config as unknown as RuleConfig;
+			const nextConfig = parsed.data as RuleConfig;
 			if (configRow) {
 				await db
 					.update(ruleConfigs)
@@ -1034,6 +1044,15 @@ export function createTripwireTools(ctx: ToolContext) {
 		// ─── Update Rule Action ─────────────────────────────────
 		updateRuleActionDef.server(async ({ ruleId, action, thresholdCount }) => {
 			await assertRepoOwner(userId, repoId);
+
+			if (!VALID_RULE_IDS.has(ruleId)) {
+				return makeSpec("ActionResult", {
+					success: false,
+					message: `Unknown rule: ${ruleId}. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
+					action: "update_rule_action",
+				});
+			}
+
 			const [configRow] = await db
 				.select()
 				.from(ruleConfigs)
@@ -1042,21 +1061,24 @@ export function createTripwireTools(ctx: ToolContext) {
 
 			const config = { ...(configRow?.config ?? DEFAULT_RULE_CONFIG) } as Record<string, Record<string, unknown>>;
 
-			if (!(ruleId in config)) {
-				return makeSpec("ActionResult", {
-					success: false,
-					message: `Unknown rule: ${ruleId}`,
-					action: "update_rule_action",
-				});
-			}
-
 			config[ruleId] = {
 				...config[ruleId],
 				action,
 				...(action === "threshold" && thresholdCount ? { thresholdCount } : {}),
 			};
 
-			const nextConfig = config as unknown as RuleConfig;
+			const parsed = ruleConfigSchema.safeParse(config);
+			if (!parsed.success) {
+				const issue = parsed.error.issues[0];
+				const path = issue?.path.join(".") ?? "config";
+				return makeSpec("ActionResult", {
+					success: false,
+					message: `Invalid rule config: ${path} — ${issue?.message ?? "validation failed"}.`,
+					action: "update_rule_action",
+				});
+			}
+
+			const nextConfig = parsed.data as RuleConfig;
 			if (configRow) {
 				await db
 					.update(ruleConfigs)
@@ -1086,18 +1108,11 @@ export function createTripwireTools(ctx: ToolContext) {
 		// ─── Update Rule Value ──────────────────────────────────
 		updateRuleValueDef.server(async ({ ruleId, field, value }) => {
 			await assertRepoOwner(userId, repoId);
-			const [configRow] = await db
-				.select()
-				.from(ruleConfigs)
-				.where(eq(ruleConfigs.repoId, repoId))
-				.limit(1);
 
-			const config = { ...(configRow?.config ?? DEFAULT_RULE_CONFIG) } as Record<string, Record<string, unknown>>;
-
-			if (!(ruleId in config)) {
+			if (!VALID_RULE_IDS.has(ruleId)) {
 				return makeSpec("ActionResult", {
 					success: false,
-					message: `Unknown rule: ${ruleId}`,
+					message: `Unknown rule: ${ruleId}. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
 					action: "update_rule_value",
 				});
 			}
@@ -1111,9 +1126,28 @@ export function createTripwireTools(ctx: ToolContext) {
 				});
 			}
 
+			const [configRow] = await db
+				.select()
+				.from(ruleConfigs)
+				.where(eq(ruleConfigs.repoId, repoId))
+				.limit(1);
+
+			const config = { ...(configRow?.config ?? DEFAULT_RULE_CONFIG) } as Record<string, Record<string, unknown>>;
+
 			config[ruleId] = { ...config[ruleId], [field]: value };
 
-			const nextConfig = config as unknown as RuleConfig;
+			const parsed = ruleConfigSchema.safeParse(config);
+			if (!parsed.success) {
+				const issue = parsed.error.issues[0];
+				const path = issue?.path.join(".") ?? "config";
+				return makeSpec("ActionResult", {
+					success: false,
+					message: `Invalid rule config: ${path} — ${issue?.message ?? "validation failed"}.`,
+					action: "update_rule_value",
+				});
+			}
+
+			const nextConfig = parsed.data as RuleConfig;
 			if (configRow) {
 				await db
 					.update(ruleConfigs)

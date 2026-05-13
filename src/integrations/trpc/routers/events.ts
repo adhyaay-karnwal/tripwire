@@ -13,6 +13,8 @@ const eventActionEnum = z.enum([
 	"comment_deleted",
 	"pipeline_allowed",
 	"pipeline_blocked",
+	"pipeline_warned",
+	"pipeline_logged",
 	"rule_near_miss",
 	"whitelist_bypass",
 	"blacklist_blocked",

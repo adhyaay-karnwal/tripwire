@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { authedProcedure, assertRepoOwner } from "../init";
 import { trpcError } from "../error";
 import { db } from "#/db";
@@ -67,58 +67,57 @@ export const whitelistRouter = {
 			await assertRepoOwner(ctx.user.id, input.repoId);
 			const ghUser = await validateGitHubUser(input.githubUsername);
 
-			// Check if user is on the blacklist
-			const [blacklisted] = await db
-				.select()
-				.from(blacklistEntries)
-				.where(
-					and(
-						eq(blacklistEntries.repoId, input.repoId),
-						eq(blacklistEntries.githubUsername, ghUser.login),
-					),
-				)
-				.limit(1);
+			// Atomically check blacklist + insert into whitelist. The unique index
+			// `whitelist_repo_username_uniq` on (repoId, lower(githubUsername))
+			// guarantees the insert is race-safe; ON CONFLICT DO NOTHING turns a
+			// concurrent duplicate into a clean "already whitelisted" 409.
+			const entry = await db.transaction(async (tx) => {
+				const [blacklisted] = await tx
+					.select()
+					.from(blacklistEntries)
+					.where(
+						and(
+							eq(blacklistEntries.repoId, input.repoId),
+							sql`lower(${blacklistEntries.githubUsername}) = lower(${ghUser.login})`,
+						),
+					)
+					.limit(1);
 
-			if (blacklisted) {
-				throw trpcError({
-					code: "whitelist.user_blacklisted",
-					status: 409,
-					message: `@${ghUser.login} is on the blacklist. Remove them from the blacklist first.`,
-					fix: "Open the People tab, remove the user from the blacklist, then re-try adding to the whitelist.",
-				});
-			}
+				if (blacklisted) {
+					throw trpcError({
+						code: "lists.blacklisted",
+						status: 409,
+						message: "User is blacklisted — remove from blacklist first",
+						fix: "Open the People tab, remove the user from the blacklist, then re-try adding to the whitelist.",
+					});
+				}
 
-			// Check if already whitelisted
-			const [existing] = await db
-				.select()
-				.from(whitelistEntries)
-				.where(
-					and(
-						eq(whitelistEntries.repoId, input.repoId),
-						eq(whitelistEntries.githubUsername, ghUser.login),
-					),
-				)
-				.limit(1);
+				const [inserted] = await tx
+					.insert(whitelistEntries)
+					.values({
+						repoId: input.repoId,
+						githubUsername: ghUser.login,
+						githubUserId: ghUser.id,
+						avatarUrl: ghUser.avatar_url,
+						addedById: ctx.user?.id,
+					})
+					.onConflictDoNothing()
+					.returning();
 
-			if (existing) {
-				throw trpcError({
-					code: "whitelist.already_present",
-					status: 409,
-					message: `@${ghUser.login} is already on the whitelist.`,
-				});
-			}
+				if (!inserted) {
+					throw trpcError({
+						code: "lists.already_whitelisted",
+						status: 409,
+						message: "User is already on the whitelist",
+					});
+				}
 
-			const [entry] = await db
-				.insert(whitelistEntries)
-				.values({
-					repoId: input.repoId,
-					githubUsername: ghUser.login,
-					githubUserId: ghUser.id,
-					avatarUrl: ghUser.avatar_url,
-					addedById: ctx.user?.id,
-				})
-				.returning();
+				return inserted;
+			});
 
+			// logEvent uses the global db connection (not tx-safe) and swallows
+			// its own errors — fire it after the transaction commits so we never
+			// leak a half-committed list state.
 			await logEvent({
 				repoId: input.repoId,
 				action: "whitelist_added",
@@ -208,37 +207,48 @@ export const blacklistRouter = {
 			await assertRepoOwner(ctx.user.id, input.repoId);
 			const ghUser = await validateGitHubUser(input.githubUsername);
 
-			// Check if already blacklisted
-			const [existing] = await db
-				.select()
-				.from(blacklistEntries)
-				.where(
-					and(
-						eq(blacklistEntries.repoId, input.repoId),
-						eq(blacklistEntries.githubUsername, ghUser.login),
-					),
-				)
-				.limit(1);
+			// Atomically remove any existing whitelist entry and insert the
+			// blacklist row. Blacklist must always win — running both in one tx
+			// closes the race where a user could remain whitelisted after being
+			// added to the blacklist. The unique index
+			// `blacklist_repo_username_uniq` on (repoId, lower(githubUsername))
+			// makes ON CONFLICT DO NOTHING the race-safe "already blacklisted"
+			// path.
+			const entry = await db.transaction(async (tx) => {
+				await tx
+					.delete(whitelistEntries)
+					.where(
+						and(
+							eq(whitelistEntries.repoId, input.repoId),
+							sql`lower(${whitelistEntries.githubUsername}) = lower(${ghUser.login})`,
+						),
+					);
 
-			if (existing) {
-				throw trpcError({
-					code: "blacklist.already_present",
-					status: 409,
-					message: `@${ghUser.login} is already on the blacklist.`,
-				});
-			}
+				const [inserted] = await tx
+					.insert(blacklistEntries)
+					.values({
+						repoId: input.repoId,
+						githubUsername: ghUser.login,
+						githubUserId: ghUser.id,
+						avatarUrl: ghUser.avatar_url,
+						addedById: ctx.user?.id,
+					})
+					.onConflictDoNothing()
+					.returning();
 
-			const [entry] = await db
-				.insert(blacklistEntries)
-				.values({
-					repoId: input.repoId,
-					githubUsername: ghUser.login,
-					githubUserId: ghUser.id,
-					avatarUrl: ghUser.avatar_url,
-					addedById: ctx.user?.id,
-				})
-				.returning();
+				if (!inserted) {
+					throw trpcError({
+						code: "lists.already_blacklisted",
+						status: 409,
+						message: "User is already on the blacklist",
+					});
+				}
 
+				return inserted;
+			});
+
+			// logEvent uses the global db connection (not tx-safe) and swallows
+			// its own errors — fire it after the transaction commits.
 			await logEvent({
 				repoId: input.repoId,
 				action: "blacklist_added",

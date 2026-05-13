@@ -1,3 +1,4 @@
+import type { KeyboardEvent, MouseEvent } from "react";
 import type { TripwireEvent, User } from "#/types/home";
 import { createUserFromUsername } from "#/utils/home";
 
@@ -16,6 +17,18 @@ function getUser(username: string): User {
 export function EventGroupCard({ group, onOpenEvent }: EventGroupCardProps) {
 	const first = group.items[0];
 	const users = group.items.flatMap((e) => e.users);
+
+	const handleAction = (ev: MouseEvent | KeyboardEvent) => {
+		ev.stopPropagation();
+		onOpenEvent?.(first);
+	};
+
+	const handleActionKeyDown = (ev: KeyboardEvent<HTMLSpanElement>) => {
+		if (ev.key === "Enter" || ev.key === " ") {
+			ev.preventDefault();
+			handleAction(ev);
+		}
+	};
 
 	return (
 		<div className="flex flex-col relative rounded-xl overflow-hidden gap-[3px] w-full bg-tw-card p-1">
@@ -44,17 +57,17 @@ export function EventGroupCard({ group, onOpenEvent }: EventGroupCardProps) {
 						</span>
 					</div>
 					{first.action ? (
-						<button
-							onClick={(ev) => {
-								ev.stopPropagation();
-								onOpenEvent?.(first);
-							}}
-							type="button"
-							className="flex items-center h-8 shrink-0 px-2.5 rounded-[10px] justify-center gap-1.5 bg-[#363639] hover:bg-[#404044] transition-colors whitespace-nowrap text-tw-text-primary"
+						<span
+							role="button"
+							tabIndex={0}
+							onClick={handleAction}
+							onKeyDown={handleActionKeyDown}
+							aria-label={first.action.label}
+							className="flex items-center h-8 shrink-0 px-2.5 rounded-[10px] justify-center gap-1.5 bg-[#363639] hover:bg-[#404044] transition-colors whitespace-nowrap text-tw-text-primary cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-tw-text-primary"
 						>
 							{first.action.kind === "close" ? <CloseCircleSolid /> : first.action.kind === "pause" ? <PauseHourglassSolid /> : null}
 							<span className="text-[13px] leading-none text-center text-tw-text-primary">{first.action.label}</span>
-						</button>
+						</span>
 					) : null}
 				</div>
 			</div>

@@ -103,7 +103,7 @@ function extractTitle(messages: UIMessage[]): string {
 }
 
 function ChatProviderClient({ children }: ChatProviderProps) {
-	const { repo } = useWorkspace();
+	const { repo, repos, setRepo } = useWorkspace();
 	const currentPath = useRouterState({ select: (s) => s.location.pathname });
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
@@ -128,11 +128,20 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 		return id;
 	});
 
+	// When a persisted chat is loaded, pin to the repoId it was created against
+	// so subsequent /api/chat requests target that repo even if the user has
+	// since switched workspace. `null` means "fall back to current workspace
+	// repo" (legacy conversations with no recorded repoId, or fresh chats).
+	const [pinnedRepoId, setPinnedRepoId] = useState<string | null>(null);
+
 	// Track whether we've created the DB row for this conversation
 	const createdConvIds = useRef(new Set<string>());
 
 	// Load persisted conversation on mount / when conversationId changes
 	const convQuery = useQuery(trpc.chats.get.queryOptions({ chatId: conversationId }));
+
+	// Resolve the effective repoId we'll send: pinned wins over the live workspace.
+	const effectiveRepoId = pinnedRepoId ?? repo?.id;
 
 	// Create connection adapter with dynamic body
 	const connection = useMemo(
@@ -140,13 +149,13 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 			fetchServerSentEvents("/api/chat", () => {
 				return {
 					body: {
-						repoId: repo?.id,
+						repoId: effectiveRepoId,
 						conversationId,
 						currentPage: currentPath,
 					},
 				};
 			}),
-		[repo?.id, conversationId, currentPath],
+		[effectiveRepoId, conversationId, currentPath],
 	);
 
 	const {
@@ -180,8 +189,22 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 			didSeed.current = conversationId;
 			createdConvIds.current.add(conversationId);
 			setMessages(convQuery.data.messages as UIMessage[]);
+
+			// Pin to the conversation's recorded repo. Legacy rows with a null
+			// repoId continue to use the current workspace repo (no pinning).
+			const storedRepoId = convQuery.data.repoId ?? null;
+			if (storedRepoId) {
+				setPinnedRepoId(storedRepoId);
+				// Auto-switch the workspace so the rest of the UI reflects the
+				// repo the chat will actually operate on. No-op if it already
+				// matches or if the user doesn't have that repo in their list.
+				if (repo?.id !== storedRepoId) {
+					const target = repos.find((r) => r.id === storedRepoId);
+					if (target) setRepo(target);
+				}
+			}
 		}
-	}, [convQuery.data, conversationId]);
+	}, [convQuery.data, conversationId, repo?.id, repos, setRepo]);
 
 	// Create conversation + save on first send, save after AI finishes
 	const createConv = useMutation(trpc.chats.create.mutationOptions());
@@ -222,11 +245,13 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 			if (!content.trim() || isQuotaExhausted) return;
 			setChatError(null);
 
-			// Create DB row on first message if we haven't yet
+			// Create DB row on first message if we haven't yet. Use the pinned
+			// repo when loading an existing chat; otherwise fall back to the
+			// live workspace repo.
 			if (!createdConvIds.current.has(conversationId)) {
 				createdConvIds.current.add(conversationId);
 				createConv.mutate(
-					{ id: conversationId, repoId: repo?.id },
+					{ id: conversationId, repoId: effectiveRepoId },
 					{
 						onSuccess: () => {
 							queryClient.invalidateQueries({ queryKey: trpc.chats.list.queryKey() });
@@ -238,7 +263,7 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 			sendChatMessage(content);
 			setTimeout(() => refetchCustomer(), 2000);
 		},
-		[sendChatMessage, isQuotaExhausted, refetchCustomer, conversationId, repo?.id],
+		[sendChatMessage, isQuotaExhausted, refetchCustomer, conversationId, effectiveRepoId],
 	);
 
 	const respondToToolApproval = useCallback(
@@ -261,8 +286,28 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 			didSeed.current = chatId;
 			createdConvIds.current.add(chatId);
 			setMessages(msgs);
+
+			// Pin the chat to its stored repo so subsequent sends target that
+			// repo even if the user switches workspace. The persisted chat row
+			// is fetched via the same trpc.chats.get query the caller already
+			// invoked, so it's cached and read synchronously here.
+			const cached = queryClient.getQueryData(
+				trpc.chats.get.queryKey({ chatId }),
+			) as { repoId: string | null } | undefined;
+			const storedRepoId = cached?.repoId ?? null;
+			if (storedRepoId) {
+				setPinnedRepoId(storedRepoId);
+				if (repo?.id !== storedRepoId) {
+					const target = repos.find((r) => r.id === storedRepoId);
+					if (target) setRepo(target);
+				}
+			} else {
+				// Legacy chat with no recorded repo — keep using the live
+				// workspace repo (no pinning).
+				setPinnedRepoId(null);
+			}
 		},
-		[setMessages],
+		[setMessages, queryClient, trpc.chats.get, repo?.id, repos, setRepo],
 	);
 
 	const newChat = useCallback(() => {
@@ -272,6 +317,8 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 		didSeed.current = null;
 		setMessages([]);
 		setChatError(null);
+		// Fresh chats follow the live workspace repo until they're persisted.
+		setPinnedRepoId(null);
 	}, [setMessages]);
 
 	const value: ChatContextValue = {

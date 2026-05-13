@@ -850,14 +850,14 @@ function RulesPage() {
 							onAddBlacklist={async (username) => {
 								if (repoId) await addBlacklist.mutateAsync({ repoId, githubUsername: username });
 							}}
-							onRemoveBlacklist={(username) => {
-								if (repoId) removeBlacklist.mutate({ repoId, githubUsername: username });
+							onRemoveBlacklist={async (username) => {
+								if (repoId) await removeBlacklist.mutateAsync({ repoId, githubUsername: username });
 							}}
 							onAddWhitelist={async (username) => {
 								if (repoId) await addWhitelist.mutateAsync({ repoId, githubUsername: username });
 							}}
-							onRemoveWhitelist={(username) => {
-								if (repoId) removeWhitelist.mutate({ repoId, githubUsername: username });
+							onRemoveWhitelist={async (username) => {
+								if (repoId) await removeWhitelist.mutateAsync({ repoId, githubUsername: username });
 							}}
 							isAddingBlacklist={addBlacklist.isPending}
 							isAddingWhitelist={addWhitelist.isPending}

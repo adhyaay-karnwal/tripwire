@@ -188,32 +188,52 @@ export const requestsRouter = {
 		.mutation(async ({ input, ctx }) => {
 			const { request: req } = await assertRequestOwner(ctx.user.id, input.requestId);
 
-			if (req.status !== "pending") {
-				throw trpcError({
-					code: "requests.already_decided",
-					status: 409,
-					message: `Request has already been ${req.status}.`,
-					why: `This request was ${req.status} at ${req.decidedAt?.toISOString() ?? "an earlier time"}.`,
-					fix: "Refresh the list — decisions can't be reversed from this view.",
-				});
-			}
-
 			const nextStatus = input.decision === "approve" ? "approved" : "denied";
 
-			if (input.decision === "approve") {
-				await applyApproval(req.repoId, req.kind, {
-					githubUsername: req.githubUsername,
-					githubUserId: req.githubUserId,
-					avatarUrl: req.avatarUrl,
-					addedById: ctx.user.id,
-				});
-			}
+			// Atomic decision: a single transaction performs the CAS UPDATE on the
+			// request row and (if approving) the whitelist/blacklist mutation, so
+			// two concurrent decides can never both observe `pending` and both run
+			// side effects. The CAS is the WHERE status = 'pending' guard plus the
+			// 0-rows check below.
+			await db.transaction(async (tx) => {
+				const updated = await tx
+					.update(contributorRequests)
+					.set({
+						status: nextStatus,
+						decidedById: ctx.user.id,
+						decidedAt: new Date(),
+					})
+					.where(
+						and(
+							eq(contributorRequests.id, req.id),
+							eq(contributorRequests.status, "pending"),
+						),
+					)
+					.returning();
 
-			await db
-				.update(contributorRequests)
-				.set({ status: nextStatus, decidedById: ctx.user.id, decidedAt: new Date() })
-				.where(eq(contributorRequests.id, req.id));
+				if (updated.length === 0) {
+					throw trpcError({
+						code: "requests.already_decided",
+						status: 409,
+						message: `Request has already been ${req.status === "pending" ? "decided" : req.status}.`,
+						why: `This request was ${req.status === "pending" ? "decided concurrently" : req.status} at ${req.decidedAt?.toISOString() ?? "an earlier time"}.`,
+						fix: "Refresh the list — decisions can't be reversed from this view.",
+					});
+				}
 
+				if (input.decision === "approve") {
+					await applyApproval(tx, req.repoId, req.kind, {
+						githubUsername: req.githubUsername,
+						githubUserId: req.githubUserId,
+						avatarUrl: req.avatarUrl,
+						addedById: ctx.user.id,
+					});
+				}
+			});
+
+			// logEvent uses the global `db` handle (it doesn't accept a tx), so we
+			// fire it after the transaction commits. If the tx threw, we never get
+			// here and no spurious "decided" event is logged.
 			await logEvent({
 				repoId: req.repoId,
 				action: "request_decided",
@@ -232,7 +252,10 @@ export const requestsRouter = {
 		}),
 } satisfies TRPCRouterRecord;
 
+type DbOrTx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
+
 async function applyApproval(
+	tx: DbOrTx,
 	repoId: string,
 	kind: RequestKind,
 	gh: {
@@ -243,7 +266,7 @@ async function applyApproval(
 	},
 ) {
 	if (kind === "unblock") {
-		await db
+		await tx
 			.delete(blacklistEntries)
 			.where(
 				and(
@@ -254,23 +277,18 @@ async function applyApproval(
 		return;
 	}
 
-	const [existing] = await db
-		.select()
-		.from(whitelistEntries)
-		.where(
-			and(
-				eq(whitelistEntries.repoId, repoId),
-				eq(whitelistEntries.githubUsername, gh.githubUsername),
-			),
-		)
-		.limit(1);
-	if (existing) return;
-
-	await db.insert(whitelistEntries).values({
-		repoId,
-		githubUsername: gh.githubUsername,
-		githubUserId: gh.githubUserId ?? undefined,
-		avatarUrl: gh.avatarUrl ?? undefined,
-		addedById: gh.addedById,
-	});
+	// Rely on the unique index (repoId, lower(githubUsername)) from PR 1 to
+	// keep this idempotent under concurrent approvals.
+	await tx
+		.insert(whitelistEntries)
+		.values({
+			repoId,
+			githubUsername: gh.githubUsername,
+			githubUserId: gh.githubUserId ?? undefined,
+			avatarUrl: gh.avatarUrl ?? undefined,
+			addedById: gh.addedById,
+		})
+		.onConflictDoNothing({
+			target: [whitelistEntries.repoId, whitelistEntries.githubUsername],
+		});
 }

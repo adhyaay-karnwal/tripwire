@@ -104,6 +104,7 @@ const REPUTATION_ACTIONS = new Set<string>([
 	"pipeline_blocked",
 	"pipeline_allowed",
 	"rule_near_miss",
+	"blacklist_blocked",
 ]);
 
 async function updateReputation(options: LogEventOptions) {
@@ -111,7 +112,9 @@ async function updateReputation(options: LogEventOptions) {
 	if (!REPUTATION_ACTIONS.has(options.action)) return;
 
 	const username = options.targetGithubUsername.toLowerCase();
-	const isBlock = options.action === "pipeline_blocked";
+	const isBlock =
+		options.action === "pipeline_blocked" ||
+		options.action === "blacklist_blocked";
 	const isAllow = options.action === "pipeline_allowed";
 	const isNearMiss = options.action === "rule_near_miss";
 

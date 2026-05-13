@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "#/db";
 import {
 	repositories,
 	ruleConfigs,
+	ruleThresholdCounters,
 	whitelistEntries,
 	blacklistEntries,
 	DEFAULT_RULE_CONFIG,
@@ -86,7 +87,15 @@ export interface PipelineResult {
 	/** Whether the content was allowed through */
 	allowed: boolean;
 	/** How the pipeline resolved */
-	outcome: "allowed" | "blocked" | "warned" | "logged" | "whitelist_bypass" | "blacklist_blocked" | "repo_not_found";
+	outcome:
+		| "allowed"
+		| "blocked"
+		| "warned"
+		| "logged"
+		| "whitelist_bypass"
+		| "blacklist_blocked"
+		| "repo_not_found"
+		| "unable_to_verify";
 	/** The rule that blocked/warned (if any) */
 	blockingRule?: string;
 	/** Human-readable reason */
@@ -99,6 +108,61 @@ export interface PipelineResult {
 	rulesChecked: number;
 	/** Internal repo ID (for event logging) */
 	repoId?: string;
+}
+
+/** Default count if a rule's `thresholdCount` is unset. */
+const DEFAULT_THRESHOLD_COUNT = 3;
+
+/**
+ * Upsert the per-(repo, user, rule) violation counter and return the new count.
+ * Caller decides whether `count >= thresholdCount` means a block.
+ */
+async function recordThresholdViolation(
+	repoId: string,
+	githubUserId: number,
+	ruleName: string,
+): Promise<number> {
+	const [row] = await db
+		.insert(ruleThresholdCounters)
+		.values({
+			repoId,
+			githubUserId,
+			ruleName,
+			count: 1,
+		})
+		.onConflictDoUpdate({
+			target: [
+				ruleThresholdCounters.repoId,
+				ruleThresholdCounters.githubUserId,
+				ruleThresholdCounters.ruleName,
+			],
+			set: {
+				count: sql`${ruleThresholdCounters.count} + 1`,
+				lastSeenAt: new Date(),
+				updatedAt: new Date(),
+			},
+		})
+		.returning({ count: ruleThresholdCounters.count });
+
+	return row?.count ?? 1;
+}
+
+/**
+ * Map an action+block-status to a final pipeline outcome.
+ * - "block" + blocked → "blocked"
+ * - "threshold" + blocked → caller must consult counter; this helper just maps
+ *   based on the final `blocked` flag passed in.
+ * - "warn" + blocked → "warned"
+ * - "log" + blocked → "logged"
+ */
+function resolveOutcome(
+	action: RuleAction,
+	blocked: boolean,
+): PipelineResult["outcome"] {
+	if (!blocked) return "allowed";
+	if (action === "block" || action === "threshold") return "blocked";
+	if (action === "warn") return "warned";
+	return "logged";
 }
 
 // ─── Near-miss threshold ───────────────────────────────────────
@@ -254,13 +318,21 @@ export async function runFilterPipeline(
 		// permission check failed, continue to whitelist/blacklist checks
 	}
 
-	// 3. Check whitelist
+	// 3. Check whitelist (id-first to dodge GitHub username changes; fall back
+	// to case-insensitive username for legacy rows without a userId).
 	const whitelistAll = await db
 		.select()
 		.from(whitelistEntries)
 		.where(eq(whitelistEntries.repoId, repo.id));
 
-	if (whitelistAll.some((w) => w.githubUsername.toLowerCase() === ctx.senderLogin.toLowerCase())) {
+	const senderLoginLower = ctx.senderLogin.toLowerCase();
+	if (
+		whitelistAll.some((w) =>
+			w.githubUserId != null
+				? w.githubUserId === ctx.senderId
+				: w.githubUsername.toLowerCase() === senderLoginLower,
+		)
+	) {
 		return {
 			allowed: true,
 			outcome: "whitelist_bypass",
@@ -270,13 +342,19 @@ export async function runFilterPipeline(
 		};
 	}
 
-	// 3. Check blacklist
+	// 3. Check blacklist (id-first, then case-insensitive username fallback).
 	const blacklistAll = await db
 		.select()
 		.from(blacklistEntries)
 		.where(eq(blacklistEntries.repoId, repo.id));
 
-	if (blacklistAll.some((b) => b.githubUsername === ctx.senderLogin)) {
+	if (
+		blacklistAll.some((b) =>
+			b.githubUserId != null
+				? b.githubUserId === ctx.senderId
+				: b.githubUsername.toLowerCase() === senderLoginLower,
+		)
+	) {
 		return {
 			allowed: false,
 			outcome: "blacklist_blocked",
@@ -344,12 +422,20 @@ export async function runFilterPipeline(
 			reason,
 		});
 		const action = config.vouchedUsersOnly.action;
-		const allowed = action === "log";
-		const outcome = action === "block" || action === "threshold"
-			? "blocked"
-			: action === "warn"
-				? "warned"
-				: "logged";
+		let outcome: PipelineResult["outcome"];
+		if (action === "threshold") {
+			const thresholdCount =
+				config.vouchedUsersOnly.thresholdCount ?? DEFAULT_THRESHOLD_COUNT;
+			const newCount = await recordThresholdViolation(
+				repo.id,
+				ctx.senderId,
+				"vouchedUsersOnly",
+			);
+			outcome = newCount >= thresholdCount ? "blocked" : "warned";
+		} else {
+			outcome = resolveOutcome(action, true);
+		}
+		const allowed = outcome !== "blocked";
 		return {
 			allowed,
 			outcome,
@@ -376,9 +462,90 @@ export async function runFilterPipeline(
 		}
 	}
 
-	// Helper: if a rule fails, we still continue checking remaining rules
-	// for near-miss detection, but we track the first failure.
-	let firstBlock: { rule: string; reason: string; action: RuleAction } | null = null;
+	// Helper: as rules trip we resolve their outcome immediately (and bump
+	// any threshold counters), then keep the most-severe trip to surface.
+	type Violation = {
+		rule: string;
+		reason: string;
+		action: RuleAction;
+		outcome: "blocked" | "warned" | "logged";
+	};
+	let firstViolation: Violation | null = null;
+
+	const SEVERITY: Record<Violation["outcome"], number> = {
+		blocked: 3,
+		warned: 2,
+		logged: 1,
+	};
+
+	async function recordViolation(
+		ruleName: string,
+		reason: string,
+		action: RuleAction,
+		thresholdCount?: number,
+	): Promise<Violation> {
+		let outcome: Violation["outcome"];
+		if (action === "threshold") {
+			const limit = thresholdCount ?? DEFAULT_THRESHOLD_COUNT;
+			const newCount = await recordThresholdViolation(
+				repo.id,
+				ctx.senderId,
+				ruleName,
+			);
+			outcome = newCount >= limit ? "blocked" : "warned";
+		} else if (action === "block") {
+			outcome = "blocked";
+		} else if (action === "warn") {
+			outcome = "warned";
+		} else {
+			outcome = "logged";
+		}
+		const v: Violation = { rule: ruleName, reason, action, outcome };
+		if (
+			!firstViolation ||
+			SEVERITY[outcome] > SEVERITY[firstViolation.outcome]
+		) {
+			firstViolation = v;
+		}
+		return v;
+	}
+
+	/**
+	 * Decide what to do when a GitHub lookup fails. For block/threshold rules
+	 * we must NOT silently fall through — treat the failure as an
+	 * "unable to verify" warning. For warn/log rules we fail open but log a
+	 * lookup_failed evaluation so it's visible in the trail.
+	 */
+	async function recordLookupFailure(
+		ruleName: string,
+		action: RuleAction,
+		err: unknown,
+	) {
+		const message =
+			err instanceof Error ? err.message : "unknown error";
+		evaluations.push({
+			rule: ruleName,
+			passed: false,
+			nearMiss: false,
+			action,
+			reason: `Unable to verify ${ruleName} for @${ctx.senderLogin}: ${message}`,
+		});
+		if (action === "block" || action === "threshold") {
+			const reason = `Tripwire could not verify ${ruleName} for @${ctx.senderLogin}; holding for review.`;
+			const v: Violation = {
+				rule: ruleName,
+				reason,
+				action,
+				outcome: "warned",
+			};
+			if (
+				!firstViolation ||
+				SEVERITY[v.outcome] > SEVERITY[firstViolation.outcome]
+			) {
+				firstViolation = v;
+			}
+		}
+	}
 
 	// ─── accountAge ────────────────────────────────────────────
 	if (config.accountAge.enabled && ghUser) {
@@ -402,8 +569,13 @@ export async function runFilterPipeline(
 		};
 		evaluations.push(eval_);
 
-		if (blocked && !firstBlock) {
-			firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.accountAge.action };
+		if (blocked) {
+			await recordViolation(
+				eval_.rule,
+				eval_.reason!,
+				config.accountAge.action,
+				config.accountAge.thresholdCount,
+			);
 		}
 	}
 
@@ -427,11 +599,16 @@ export async function runFilterPipeline(
 			};
 			evaluations.push(eval_);
 
-			if (blocked && !firstBlock) {
-				firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.minMergedPrs.action };
+			if (blocked) {
+				await recordViolation(
+					eval_.rule,
+					eval_.reason!,
+					config.minMergedPrs.action,
+					config.minMergedPrs.thresholdCount,
+				);
 			}
-		} catch {
-			// Skip if API fails
+		} catch (err) {
+			await recordLookupFailure("minMergedPrs", config.minMergedPrs.action, err);
 		}
 	}
 
@@ -451,8 +628,13 @@ export async function runFilterPipeline(
 		};
 		evaluations.push(eval_);
 
-		if (!passed && !firstBlock) {
-			firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.languageRequirement.action };
+		if (!passed) {
+			await recordViolation(
+				eval_.rule,
+				eval_.reason!,
+				config.languageRequirement.action,
+				config.languageRequirement.thresholdCount,
+			);
 		}
 	}
 
@@ -472,8 +654,13 @@ export async function runFilterPipeline(
 		};
 		evaluations.push(eval_);
 
-		if (blocked && !firstBlock) {
-			firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.aiSlopDetection.action };
+		if (blocked) {
+			await recordViolation(
+				eval_.rule,
+				eval_.reason!,
+				config.aiSlopDetection.action,
+				config.aiSlopDetection.thresholdCount,
+			);
 		}
 	}
 
@@ -497,11 +684,16 @@ export async function runFilterPipeline(
 			};
 			evaluations.push(eval_);
 
-			if (blocked && !firstBlock) {
-				firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.maxPrsPerDay.action };
+			if (blocked) {
+				await recordViolation(
+					eval_.rule,
+					eval_.reason!,
+					config.maxPrsPerDay.action,
+					config.maxPrsPerDay.thresholdCount,
+				);
 			}
-		} catch {
-			// Skip if API fails
+		} catch (err) {
+			await recordLookupFailure("maxPrsPerDay", config.maxPrsPerDay.action, err);
 		}
 	}
 
@@ -526,11 +718,20 @@ export async function runFilterPipeline(
 			};
 			evaluations.push(eval_);
 
-			if (blocked && !firstBlock) {
-				firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.maxFilesChanged.action };
+			if (blocked) {
+				await recordViolation(
+					eval_.rule,
+					eval_.reason!,
+					config.maxFilesChanged.action,
+					config.maxFilesChanged.thresholdCount,
+				);
 			}
-		} catch {
-			// Skip if API fails
+		} catch (err) {
+			await recordLookupFailure(
+				"maxFilesChanged",
+				config.maxFilesChanged.action,
+				err,
+			);
 		}
 	}
 
@@ -554,11 +755,20 @@ export async function runFilterPipeline(
 			};
 			evaluations.push(eval_);
 
-			if (blocked && !firstBlock) {
-				firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.repoActivityMinimum.action };
+			if (blocked) {
+				await recordViolation(
+					eval_.rule,
+					eval_.reason!,
+					config.repoActivityMinimum.action,
+					config.repoActivityMinimum.thresholdCount,
+				);
 			}
-		} catch {
-			// Skip if API fails
+		} catch (err) {
+			await recordLookupFailure(
+				"repoActivityMinimum",
+				config.repoActivityMinimum.action,
+				err,
+			);
 		}
 	}
 
@@ -578,11 +788,20 @@ export async function runFilterPipeline(
 			};
 			evaluations.push(eval_);
 
-			if (!hasReadme && !firstBlock) {
-				firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.requireProfileReadme.action };
+			if (!hasReadme) {
+				await recordViolation(
+					eval_.rule,
+					eval_.reason!,
+					config.requireProfileReadme.action,
+					config.requireProfileReadme.thresholdCount,
+				);
 			}
-		} catch {
-			// Skip if API fails
+		} catch (err) {
+			await recordLookupFailure(
+				"requireProfileReadme",
+				config.requireProfileReadme.action,
+				err,
+			);
 		}
 	}
 
@@ -605,8 +824,13 @@ export async function runFilterPipeline(
 				: undefined,
 		};
 		evaluations.push(eval_);
-		if (tripped && !firstBlock) {
-			firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.aiHoneypot.action };
+		if (tripped) {
+			await recordViolation(
+				eval_.rule,
+				eval_.reason!,
+				config.aiHoneypot.action,
+				config.aiHoneypot.thresholdCount,
+			);
 		}
 	}
 
@@ -627,28 +851,25 @@ export async function runFilterPipeline(
 		};
 		evaluations.push(eval_);
 
-		if (blocked && !firstBlock) {
-			firstBlock = { rule: eval_.rule, reason: eval_.reason!, action: config.cryptoAddressDetection.action };
+		if (blocked) {
+			await recordViolation(
+				eval_.rule,
+				eval_.reason!,
+				config.cryptoAddressDetection.action,
+				config.cryptoAddressDetection.thresholdCount,
+			);
 		}
 	}
 
 	// ─── Result ────────────────────────────────────────────────
-	if (firstBlock) {
-		const action = firstBlock.action;
-		// "log" means we record but don't act — content is effectively allowed
-		const allowed = action === "log";
-		const outcome = action === "block" || action === "threshold"
-			? "blocked"
-			: action === "warn"
-				? "warned"
-				: "logged";
-
+	if (firstViolation) {
+		const v = firstViolation as Violation;
 		return {
-			allowed,
-			outcome,
-			blockingRule: firstBlock.rule,
-			blockReason: firstBlock.reason,
-			resolvedAction: action,
+			allowed: v.outcome !== "blocked",
+			outcome: v.outcome,
+			blockingRule: v.rule,
+			blockReason: v.reason,
+			resolvedAction: v.action,
 			evaluations,
 			rulesChecked,
 			repoId: repo.id,
@@ -763,7 +984,7 @@ async function logPipelineEvents(
 		case "warned":
 			eventBatch.push({
 				...baseEvent,
-				action: "pipeline_blocked",
+				action: "pipeline_warned",
 				severity: "warning",
 				ruleName: result.blockingRule,
 				description: `Warning: ${result.blockReason}`,
@@ -771,7 +992,7 @@ async function logPipelineEvents(
 					...extraMetadata,
 					rulesChecked: result.rulesChecked,
 					blockingRule: result.blockingRule,
-					ruleAction: "warn",
+					ruleAction: result.resolvedAction ?? "warn",
 				},
 			});
 			break;
@@ -779,7 +1000,7 @@ async function logPipelineEvents(
 		case "logged":
 			eventBatch.push({
 				...baseEvent,
-				action: "pipeline_blocked",
+				action: "pipeline_logged",
 				severity: "info",
 				ruleName: result.blockingRule,
 				description: `Logged (no action): ${result.blockReason}`,
@@ -788,6 +1009,22 @@ async function logPipelineEvents(
 					rulesChecked: result.rulesChecked,
 					blockingRule: result.blockingRule,
 					ruleAction: "log",
+				},
+			});
+			break;
+
+		case "unable_to_verify":
+			eventBatch.push({
+				...baseEvent,
+				action: "pipeline_warned",
+				severity: "warning",
+				ruleName: result.blockingRule,
+				description: `Unable to verify: ${result.blockReason}`,
+				metadata: {
+					...extraMetadata,
+					rulesChecked: result.rulesChecked,
+					blockingRule: result.blockingRule,
+					ruleAction: "unable_to_verify",
 				},
 			});
 			break;
@@ -848,7 +1085,7 @@ export async function handlePullRequest(
 	const [owner, repo] = ctx.repoFullName.split("/");
 	const token = await getInstallationToken(ctx.installationId);
 
-	if (action === "block" || action === "threshold") {
+	if (result.outcome === "blocked") {
 		const comment = `> **Tripwire** — This PR was automatically closed.\n>\n> Reason: ${result.blockReason}\n>\n${appealFooter(ctx.repoFullName, result.outcome, ctx.senderLogin)}`;
 		await closePullRequest(token, owner, repo, prNumber, comment);
 
@@ -866,14 +1103,14 @@ export async function handlePullRequest(
 				metadata: { title: prTitle, reason: result.blockReason, ruleAction: action },
 			});
 		}
-	} else if (action === "warn") {
+	} else if (result.outcome === "warned" || result.outcome === "unable_to_verify") {
 		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._\n>\n${warnFooter(ctx.repoFullName, ctx.senderLogin)}`;
 		await addComment(token, owner, repo, prNumber, comment);
 
 		if (result.repoId) {
 			await logEvent({
 				repoId: result.repoId,
-				action: "pipeline_blocked",
+				action: "pipeline_warned",
 				severity: "warning",
 				contentType: "pull_request",
 				ruleName: result.blockingRule,
@@ -881,11 +1118,11 @@ export async function handlePullRequest(
 				targetGithubUsername: ctx.senderLogin,
 				targetGithubUserId: ctx.senderId,
 				githubRef,
-				metadata: { title: prTitle, reason: result.blockReason, ruleAction: "warn" },
+				metadata: { title: prTitle, reason: result.blockReason, ruleAction: action },
 			});
 		}
 	}
-	// "log" → no GitHub action, pipeline events already logged
+	// "logged" → no GitHub action, pipeline events already logged
 }
 
 export async function handleIssue(
@@ -907,7 +1144,7 @@ export async function handleIssue(
 	const [owner, repo] = ctx.repoFullName.split("/");
 	const token = await getInstallationToken(ctx.installationId);
 
-	if (action === "block" || action === "threshold") {
+	if (result.outcome === "blocked") {
 		const comment = `> **Tripwire** — This issue was automatically closed.\n>\n> Reason: ${result.blockReason}\n>\n${appealFooter(ctx.repoFullName, result.outcome, ctx.senderLogin)}`;
 		await closeIssue(token, owner, repo, issueNumber, comment);
 
@@ -925,14 +1162,14 @@ export async function handleIssue(
 				metadata: { title: issueTitle, reason: result.blockReason, ruleAction: action },
 			});
 		}
-	} else if (action === "warn") {
+	} else if (result.outcome === "warned" || result.outcome === "unable_to_verify") {
 		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._\n>\n${warnFooter(ctx.repoFullName, ctx.senderLogin)}`;
 		await addComment(token, owner, repo, issueNumber, comment);
 
 		if (result.repoId) {
 			await logEvent({
 				repoId: result.repoId,
-				action: "pipeline_blocked",
+				action: "pipeline_warned",
 				severity: "warning",
 				contentType: "issue",
 				ruleName: result.blockingRule,
@@ -940,7 +1177,7 @@ export async function handleIssue(
 				targetGithubUsername: ctx.senderLogin,
 				targetGithubUserId: ctx.senderId,
 				githubRef,
-				metadata: { title: issueTitle, reason: result.blockReason, ruleAction: "warn" },
+				metadata: { title: issueTitle, reason: result.blockReason, ruleAction: action },
 			});
 		}
 	}
@@ -964,7 +1201,7 @@ export async function handleComment(
 	const [owner, repo] = ctx.repoFullName.split("/");
 	const token = await getInstallationToken(ctx.installationId);
 
-	if (action === "block" || action === "threshold") {
+	if (result.outcome === "blocked") {
 		await deleteComment(token, owner, repo, commentId);
 
 		if (result.repoId) {
@@ -981,14 +1218,14 @@ export async function handleComment(
 				metadata: { reason: result.blockReason, ruleAction: action },
 			});
 		}
-	} else if (action === "warn") {
+	} else if (result.outcome === "warned" || result.outcome === "unable_to_verify") {
 		const comment = `> **Tripwire** — Warning\n>\n> ${result.blockReason}\n>\n> _This is a warning — no action was taken._\n>\n${warnFooter(ctx.repoFullName, ctx.senderLogin)}`;
 		await addComment(token, owner, repo, issueNumber, comment);
 
 		if (result.repoId) {
 			await logEvent({
 				repoId: result.repoId,
-				action: "pipeline_blocked",
+				action: "pipeline_warned",
 				severity: "warning",
 				contentType: "comment",
 				ruleName: result.blockingRule,
@@ -996,7 +1233,7 @@ export async function handleComment(
 				targetGithubUsername: ctx.senderLogin,
 				targetGithubUserId: ctx.senderId,
 				githubRef,
-				metadata: { reason: result.blockReason, ruleAction: "warn" },
+				metadata: { reason: result.blockReason, ruleAction: action },
 			});
 		}
 	}

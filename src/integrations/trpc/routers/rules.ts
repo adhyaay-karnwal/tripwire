@@ -241,23 +241,58 @@ export const rulesRouter = {
 		)
 		.mutation(async ({ input, ctx }) => {
 			await assertRepoOwner(ctx.user.id, input.repoId);
-			// Upsert rule config
-			const [existing] = await db
-				.select()
-				.from(ruleConfigs)
-				.where(eq(ruleConfigs.repoId, input.repoId));
 
-			if (existing) {
-				await db
-					.update(ruleConfigs)
-					.set({ config: input.config, updatedAt: new Date() })
+			// Persist rule config + whitelist + blacklist atomically. If the lists
+			// fail to insert we don't want the rule config drifting from them.
+			//
+			// TODO: conflict-resolution policy between whitelist and blacklist on
+			// import. Today we accept the imported data as-is — if a username
+			// shows up on both lists in the source repo, both rows land here.
+			// The unique-per-list indexes still prevent duplicates within a list.
+			await db.transaction(async (tx) => {
+				const [existing] = await tx
+					.select()
+					.from(ruleConfigs)
 					.where(eq(ruleConfigs.repoId, input.repoId));
-			} else {
-				await db.insert(ruleConfigs).values({
-					repoId: input.repoId,
-					config: input.config,
-				});
-			}
+
+				if (existing) {
+					await tx
+						.update(ruleConfigs)
+						.set({ config: input.config, updatedAt: new Date() })
+						.where(eq(ruleConfigs.repoId, input.repoId));
+				} else {
+					await tx.insert(ruleConfigs).values({
+						repoId: input.repoId,
+						config: input.config,
+					});
+				}
+
+				if (input.whitelist && input.whitelist.length > 0) {
+					await tx
+						.insert(whitelistEntries)
+						.values(
+							input.whitelist.map((githubUsername) => ({
+								repoId: input.repoId,
+								githubUsername,
+								addedById: ctx.user.id,
+							})),
+						)
+						.onConflictDoNothing();
+				}
+
+				if (input.blacklist && input.blacklist.length > 0) {
+					await tx
+						.insert(blacklistEntries)
+						.values(
+							input.blacklist.map((githubUsername) => ({
+								repoId: input.repoId,
+								githubUsername,
+								addedById: ctx.user.id,
+							})),
+						)
+						.onConflictDoNothing();
+				}
+			});
 
 			return { success: true };
 		}),

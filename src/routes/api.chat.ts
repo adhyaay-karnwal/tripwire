@@ -20,7 +20,7 @@ import { buildSystemPrompt } from "#/lib/ai/prompt";
 import { createContext, assertRepoOwner } from "#/integrations/trpc/init";
 import { autumn } from "#/lib/autumn";
 import { db } from "#/db";
-import { organizations, repositories } from "#/db/schema";
+import { conversations, organizations, repositories } from "#/db/schema";
 import { eq } from "drizzle-orm";
 import type { ProviderError } from "#/types/chat";
 
@@ -107,6 +107,27 @@ export const Route = createFileRoute("/api/chat")({
 					}
 
 					const { messages: rawMessages, repoId, conversationId, currentPage } = await request.json();
+
+					// If the client supplied a conversationId AND a row already exists
+					// for it, verify the row belongs to this user. Without this check
+					// the endpoint trusts the request body, so a user could attach
+					// their message history to someone else's chat (or scrape ids).
+					// Note: the first send for a new chat races with trpc.chats.create
+					// so the row may legitimately not exist yet — only block when the
+					// row exists and is owned by a different user.
+					if (conversationId && typeof conversationId === "string") {
+						const [existing] = await db
+							.select({ userId: conversations.userId })
+							.from(conversations)
+							.where(eq(conversations.id, conversationId))
+							.limit(1);
+						if (existing && existing.userId !== ctx.user.id) {
+							return new Response(
+								JSON.stringify({ error: "conversation_not_accessible" }),
+								{ status: 403, headers: { "Content-Type": "application/json" } },
+							);
+						}
+					}
 
 					// Sanitize corrupted messages from TanStack AI
 					// TODO: Remove when TanStack AI fixes tool approval state management

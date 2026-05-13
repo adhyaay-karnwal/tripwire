@@ -3,7 +3,7 @@ import { UnicodeSpinner, useRandomThinkingVariant } from "#/components/ui/unicod
 import { useThinkingPhrase } from "#/lib/ai/thinking-phrases";
 import type { UIMessage, MessagePart, ToolCallPart, ToolResultPart, RenderSpec } from "#/types/chat";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { Streamdown } from "streamdown";
+import { Streamdown, type StreamdownProps } from "streamdown";
 import { code } from "@streamdown/code";
 import { useAIChat } from "#/lib/ai/chat-context";
 import { registry } from "#/lib/ai/ui-registry";
@@ -402,9 +402,82 @@ function MessagePartRenderer({ part, onRespondToApproval }: MessagePartRendererP
 	}
 }
 
+// Security: restrict which URLs AI-generated markdown can render as links/images.
+// Without these allowlists, AI or GitHub-derived content could inject:
+//   - clickable links to attacker-controlled domains
+//   - auto-loaded <img> tags that leak the viewer's IP/UA to arbitrary hosts
+// Keep the lists minimal — better to block too much and add later.
+const ALLOWED_LINK_PREFIXES: readonly string[] = [
+	"https://github.com/",
+	"https://api.github.com/",
+	"https://gist.github.com/",
+	"https://docs.github.com/",
+	"https://avatars.githubusercontent.com/",
+	"https://user-images.githubusercontent.com/",
+];
+
+const ALLOWED_IMAGE_PREFIXES: readonly string[] = [
+	"https://avatars.githubusercontent.com/",
+	"https://user-images.githubusercontent.com/",
+	"https://github.com/",
+];
+
+function isAllowed(url: string | undefined, allowlist: readonly string[]): boolean {
+	if (!url) return false;
+	return allowlist.some((prefix) => url.startsWith(prefix));
+}
+
+// `urlTransform` is called by Streamdown for every href/src; returning the URL
+// unchanged keeps it, returning an empty/non-matching string drops it.
+// We use it as a first-line filter; the `a`/`img` component overrides below
+// are a defensive second layer.
+const safeUrlTransform = (url: string, key: string): string => {
+	if (key === "src") {
+		return isAllowed(url, ALLOWED_IMAGE_PREFIXES) ? url : "";
+	}
+	if (key === "href") {
+		return isAllowed(url, ALLOWED_LINK_PREFIXES) ? url : "";
+	}
+	return url;
+};
+
+// Streamdown lacks a built-in image/link allowlist prop. We layer a custom
+// `urlTransform` (filters URLs) with `components` overrides for `a` and `img`
+// (renders the disallowed URL as inert text instead of a clickable/loaded element).
+const SAFE_STREAMDOWN_CONFIG = {
+	linkSafety: { enabled: true },
+	urlTransform: safeUrlTransform,
+	components: {
+		a: ({ href, children, ...rest }) => {
+			if (!isAllowed(href, ALLOWED_LINK_PREFIXES)) {
+				// Render as plain text — no anchor, no navigation.
+				return <span className="tw-chat-blocked-link">{children}</span>;
+			}
+			return (
+				<a {...rest} href={href} target="_blank" rel="noopener noreferrer">
+					{children}
+				</a>
+			);
+		},
+		img: ({ src, alt }) => {
+			if (typeof src !== "string" || !isAllowed(src, ALLOWED_IMAGE_PREFIXES)) {
+				// Drop the image entirely — never issue a GET to a non-allowlisted host.
+				return null;
+			}
+			return <img src={src} alt={alt ?? ""} loading="lazy" referrerPolicy="no-referrer" />;
+		},
+	},
+} satisfies Pick<StreamdownProps, "linkSafety" | "urlTransform" | "components">;
+
 function MarkdownText({ content }: { content: string }) {
 	return (
-		<Streamdown className="tw-chat-markdown" mode="static" plugins={{ code }} controls={false} linkSafety={{ enabled: false }}>
+		<Streamdown
+			className="tw-chat-markdown"
+			mode="static"
+			plugins={{ code }}
+			controls={false}
+			{...SAFE_STREAMDOWN_CONFIG}
+		>
 			{content}
 		</Streamdown>
 	);
@@ -488,7 +561,13 @@ function ReasoningBlock({ content }: { content: string }) {
 			</button>
 			{isOpen && (
 				<div className="pl-4 border-l border-[#27272A] text-[12px] leading-[18px] text-tw-text-muted/70">
-					<Streamdown className="tw-chat-markdown" mode="static" plugins={{ code }} controls={false} linkSafety={{ enabled: false }}>
+					<Streamdown
+						className="tw-chat-markdown"
+						mode="static"
+						plugins={{ code }}
+						controls={false}
+						{...SAFE_STREAMDOWN_CONFIG}
+					>
 						{content}
 					</Streamdown>
 				</div>

@@ -441,6 +441,42 @@ export function revertRuleConfigChange(base: RuleConfig, draft: RuleConfig, chan
 				},
 			});
 		}
+		if (changeId === "repoFiles.prTemplate.honeypotPhrases") {
+			return normalizeRuleConfig({
+				...normalizedDraft,
+				repoFiles: {
+					...normalizedDraft.repoFiles,
+					prTemplate: {
+						...normalizedDraft.repoFiles.prTemplate,
+						honeypotPhrases: normalizedBase.repoFiles.prTemplate.honeypotPhrases.map((p) => ({ ...p })),
+					},
+				},
+			});
+		}
+		if (changeId === "repoFiles.rulesMd.customContent") {
+			return normalizeRuleConfig({
+				...normalizedDraft,
+				repoFiles: {
+					...normalizedDraft.repoFiles,
+					rulesMd: {
+						...normalizedDraft.repoFiles.rulesMd,
+						customContent: normalizedBase.repoFiles.rulesMd.customContent,
+					},
+				},
+			});
+		}
+		if (changeId === "repoFiles.prTemplate.customContent") {
+			return normalizeRuleConfig({
+				...normalizedDraft,
+				repoFiles: {
+					...normalizedDraft.repoFiles,
+					prTemplate: {
+						...normalizedDraft.repoFiles.prTemplate,
+						customContent: normalizedBase.repoFiles.prTemplate.customContent,
+					},
+				},
+			});
+		}
 		return normalizeRuleConfig(draft);
 	}
 

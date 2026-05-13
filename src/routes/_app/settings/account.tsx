@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "#/lib/auth-context";
 import { authClient } from "#/lib/auth-client";
+import { toastFromError } from "#/lib/toast-error";
 import {
 	Dialog,
 	DialogTrigger,
@@ -29,6 +30,49 @@ function AccountSettingsPage() {
 		: null;
 
 	const handleSignOut = async () => {
+		// "Sign out everywhere" must revoke ALL sessions for this user, not just
+		// the cookie on this device. better-auth's /revoke-sessions endpoint
+		// deletes every session row for the current user (gated by
+		// sensitiveSessionMiddleware, which only requires a valid session — no
+		// re-auth in this version, 1.6.9). If it fails, surface the error and
+		// let the user decide whether to still sign out locally as a fallback.
+		try {
+			const res = await authClient.revokeSessions();
+			if (res.error) {
+				const status = (res.error as { status?: number }).status;
+				if (status === 403) {
+					// Some better-auth configs treat /revoke-sessions as a
+					// fresh-session action — if a future upgrade enables that,
+					// the server will respond 403 SESSION_NOT_FRESH.
+					toastFromError(res.error, {
+						fallbackTitle: "Re-authenticate to sign out everywhere",
+					});
+					return;
+				}
+				toastFromError(res.error, {
+					fallbackTitle: "Couldn't revoke other sessions",
+				});
+				const proceed =
+					typeof window !== "undefined"
+						? window.confirm(
+								"We couldn't sign you out on other devices. Sign out on this device only?",
+							)
+						: false;
+				if (!proceed) return;
+			}
+		} catch (err) {
+			toastFromError(err, {
+				fallbackTitle: "Couldn't revoke other sessions",
+			});
+			const proceed =
+				typeof window !== "undefined"
+					? window.confirm(
+							"We couldn't sign you out on other devices. Sign out on this device only?",
+						)
+					: false;
+			if (!proceed) return;
+		}
+
 		await authClient.signOut();
 		navigate({ to: "/login" });
 	};

@@ -420,6 +420,35 @@ export const githubReputation = pgTable(
 );
 
 /**
+ * Per-(repo, user, rule) violation counters used by the "threshold" rule action.
+ * Action "threshold" means: ignore until the user trips the rule N times,
+ * then block. The counter increments on every violation that didn't already
+ * block; once `count >= thresholdCount` the pipeline treats it as a block.
+ */
+export const ruleThresholdCounters = pgTable(
+	"rule_threshold_counters",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		repoId: uuid("repo_id")
+			.notNull()
+			.references(() => repositories.id, { onDelete: "cascade" }),
+		githubUserId: integer("github_user_id").notNull(),
+		ruleName: text("rule_name").notNull(),
+		count: integer("count").notNull().default(0),
+		firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
+		lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+		updatedAt: timestamp("updated_at").notNull().defaultNow(),
+	},
+	(t) => [
+		uniqueIndex("rule_threshold_counters_repo_user_rule_uniq").on(
+			t.repoId,
+			t.githubUserId,
+			t.ruleName,
+		),
+	],
+);
+
+/**
  * AI chat conversations — persisted chats with full message history.
  */
 export const conversations = pgTable(
