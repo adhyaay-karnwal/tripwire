@@ -5,31 +5,51 @@
 	"globalEnv": [
 		"NODE_ENV",
 		"DATABASE_URL",
+		"DATABASE_URL_UNPOOLED",
 		"POSTGRES_URL_NON_POOLING",
-		"PGDATABASE",
+		"POSTGRES_URL_NO_SSL",
 		"POSTGRES_PRISMA_URL",
 		"POSTGRES_URL",
+		"POSTGRES_USER",
+		"POSTGRES_PASSWORD",
+		"POSTGRES_HOST",
+		"POSTGRES_DATABASE",
+		"PGDATABASE",
 		"PGUSER",
 		"PGPASSWORD",
+		"PGHOST",
+		"PGHOST_UNPOOLED",
+		"NEON_PROJECT_ID",
 		"BETTER_AUTH_SECRET",
 		"BETTER_AUTH_URL",
+		"BETTER_AUTH_API_KEY",
 		"GITHUB_APP_ID",
 		"GITHUB_APP_PRIVATE_KEY",
 		"GITHUB_APP_INSTALLATION_ID",
 		"GITHUB_CLIENT_ID",
 		"GITHUB_CLIENT_SECRET",
+		"GITHUB_WEBHOOK_SECRET",
 		"VITE_GITHUB_APP_SLUG",
 		"AUTUMN_SECRET_KEY",
 		"UNKEY_ROOT_KEY",
 		"OPENROUTER_API_KEY",
 		"OPENAI_API_KEY",
-		"TRIPWIRE_AI_MODEL"
+		"TRIPWIRE_AI_MODEL",
+		"AXIOM_TOKEN",
+		"AXIOM_DATASET",
+		"AXIOM_TRACES_DATASET",
+		"OTEL_EXPORTER_OTLP_ENDPOINT"
 	],
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
 			"inputs": ["src/**", "tsconfig.json", "package.json"],
-			"outputs": [".output/**", ".tanstack/**", "dist/**"]
+			"outputs": [
+				".output/**",
+				".tanstack/**",
+				"dist/**",
+				".vercel/output/**"
+			]
 		},
 		"dev": {
 			"cache": false,
