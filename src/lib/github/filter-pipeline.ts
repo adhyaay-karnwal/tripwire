@@ -59,6 +59,45 @@ function warnFooter(repoFullName: string, username: string): string {
 	return `> Want to skip these checks in the future? [Request vouched access as @${username}](${url}).`;
 }
 
+// ─── Scope helper ──────────────────────────────────────────────
+
+type ScopeKey = "pullRequests" | "issues" | "comments";
+
+function contentTypeToScopeKey(t: EventContentType | undefined): ScopeKey | null {
+	if (t === "pull_request") return "pullRequests";
+	if (t === "issue") return "issues";
+	if (t === "comment") return "comments";
+	return null;
+}
+
+interface RuleWithScope {
+	enabled: boolean;
+	scopeOverride?: {
+		pullRequests?: boolean;
+		issues?: boolean;
+		comments?: boolean;
+	};
+}
+
+/**
+ * Returns true if a rule should run for the given content type.
+ * - rule.enabled must be true.
+ * - rule.scopeOverride[key], if set, wins over the repo-wide scope.
+ * - When contentType is unknown (legacy webhook path), the rule runs.
+ */
+function ruleApplies(
+	rule: RuleWithScope,
+	contentType: EventContentType | undefined,
+	scope: { pullRequests: boolean; issues: boolean; comments: boolean },
+): boolean {
+	if (!rule.enabled) return false;
+	const key = contentTypeToScopeKey(contentType);
+	if (!key) return true;
+	const override = rule.scopeOverride?.[key];
+	if (override !== undefined) return override;
+	return scope[key];
+}
+
 // ─── Types ─────────────────────────────────────────────────────
 
 export interface WebhookContext {
@@ -372,18 +411,9 @@ export async function runFilterPipeline(
 		.from(ruleConfigs)
 		.where(eq(ruleConfigs.repoId, repo.id));
 
-	// 4a. Honor content-scope toggles ("watching" checkboxes on Rules page).
-	// If this content type isn't being watched, treat as allowed and skip everything.
+	// 4a. Content-scope is per-rule now. The repo-wide scope is the default
+	// each rule inherits; rule.scopeOverride wins when set. See ruleApplies().
 	const scope = { ...DEFAULT_RULE_CONFIG.contentScope, ...configRow?.config?.contentScope };
-	if (contentType === "pull_request" && !scope.pullRequests) {
-		return { allowed: true, outcome: "allowed", evaluations, rulesChecked, repoId: repo.id };
-	}
-	if (contentType === "issue" && !scope.issues) {
-		return { allowed: true, outcome: "allowed", evaluations, rulesChecked, repoId: repo.id };
-	}
-	if (contentType === "comment" && !scope.comments) {
-		return { allowed: true, outcome: "allowed", evaluations, rulesChecked, repoId: repo.id };
-	}
 
 	const rawConfig = configRow?.config;
 	const config: RuleConfig = {
@@ -412,7 +442,7 @@ export async function runFilterPipeline(
 	// ─── vouchedUsersOnly ──────────────────────────────────────
 	// Non-vouched (not-whitelisted) users are rejected before any
 	// per-user GitHub lookups. Whitelisted users already returned above.
-	if (config.vouchedUsersOnly.enabled) {
+	if (ruleApplies(config.vouchedUsersOnly, contentType, scope)) {
 		rulesChecked++;
 		const reason = `@${ctx.senderLogin} is not a vouched contributor for this repository.`;
 		evaluations.push({
@@ -548,7 +578,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── accountAge ────────────────────────────────────────────
-	if (config.accountAge.enabled && ghUser) {
+	if (ruleApplies(config.accountAge, contentType, scope) && ghUser) {
 		rulesChecked++;
 		const createdAt = new Date(ghUser.created_at as string);
 		const ageInDays = Math.floor(
@@ -580,7 +610,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── minMergedPrs ──────────────────────────────────────────
-	if (config.minMergedPrs.enabled) {
+	if (ruleApplies(config.minMergedPrs, contentType, scope)) {
 		rulesChecked++;
 		try {
 			const count = await getMergedPrCount(token, ctx.senderLogin);
@@ -613,7 +643,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── languageRequirement ───────────────────────────────────
-	if (config.languageRequirement.enabled && contentText && contentText.length > 20) {
+	if (ruleApplies(config.languageRequirement, contentType, scope) && contentText && contentText.length > 20) {
 		rulesChecked++;
 		const requiredLang = config.languageRequirement.language.toLowerCase();
 		const passed = isLikelyLanguage(contentText, requiredLang);
@@ -639,7 +669,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── aiSlopDetection ───────────────────────────────────────
-	if (config.aiSlopDetection.enabled && contentText) {
+	if (ruleApplies(config.aiSlopDetection, contentType, scope) && contentText) {
 		rulesChecked++;
 		const slopMatch = detectAiSlop(contentText);
 		const blocked = slopMatch !== null;
@@ -665,7 +695,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── maxPrsPerDay ──────────────────────────────────────────
-	if (config.maxPrsPerDay.enabled) {
+	if (ruleApplies(config.maxPrsPerDay, contentType, scope)) {
 		rulesChecked++;
 		try {
 			const count = await countUserPrsToday(token, ctx.senderLogin, ctx.repoFullName);
@@ -698,7 +728,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── maxFilesChanged ───────────────────────────────────────
-	if (config.maxFilesChanged.enabled && ctx.prNumber) {
+	if (ruleApplies(config.maxFilesChanged, contentType, scope) && ctx.prNumber) {
 		rulesChecked++;
 		try {
 			const [owner, repoName] = ctx.repoFullName.split("/");
@@ -736,7 +766,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── repoActivityMinimum ───────────────────────────────────
-	if (config.repoActivityMinimum.enabled) {
+	if (ruleApplies(config.repoActivityMinimum, contentType, scope)) {
 		rulesChecked++;
 		try {
 			const repoCount = await getUserPublicRepoCount(token, ctx.senderLogin);
@@ -773,7 +803,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── requireProfileReadme ──────────────────────────────────
-	if (config.requireProfileReadme.enabled) {
+	if (ruleApplies(config.requireProfileReadme, contentType, scope)) {
 		rulesChecked++;
 		try {
 			const hasReadme = await hasProfileReadme(token, ctx.senderLogin);
@@ -809,7 +839,7 @@ export async function runFilterPipeline(
 	// Detect content containing any of the per-repo honeypot phrases
 	// injected into the PR template. Real humans won't write them; AI
 	// agents reading the template often will.
-	if (config.aiHoneypot.enabled && contentText && honeypotPhrases.length > 0) {
+	if (ruleApplies(config.aiHoneypot, contentType, scope) && contentText && honeypotPhrases.length > 0) {
 		rulesChecked++;
 		const haystack = contentText.toLowerCase();
 		const hit = honeypotPhrases.find((p) => haystack.includes(p.phrase.toLowerCase()));
@@ -835,7 +865,7 @@ export async function runFilterPipeline(
 	}
 
 	// ─── cryptoAddressDetection ────────────────────────────────
-	if (config.cryptoAddressDetection.enabled && contentText) {
+	if (ruleApplies(config.cryptoAddressDetection, contentType, scope) && contentText) {
 		rulesChecked++;
 		const cryptoMatch = detectCryptoAddress(contentText);
 		const blocked = cryptoMatch !== null;

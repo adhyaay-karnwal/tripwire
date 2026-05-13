@@ -2,10 +2,20 @@ import { z } from "zod";
 
 const ruleActionSchema = z.enum(["block", "warn", "log", "threshold"]);
 
+// Per-rule override on the repo-wide contentScope. If a key is set, it wins
+// for this rule on that content type. If absent, the rule inherits the
+// repo's contentScope[key].
+const ruleScopeOverrideSchema = z.object({
+	pullRequests: z.boolean().optional(),
+	issues: z.boolean().optional(),
+	comments: z.boolean().optional(),
+}).optional();
+
 const ruleBaseSchema = z.object({
 	enabled: z.boolean(),
 	action: ruleActionSchema.default("block"),
 	thresholdCount: z.number().int().min(1).optional(),
+	scopeOverride: ruleScopeOverrideSchema,
 });
 
 const honeypotPhraseSchema = z.object({

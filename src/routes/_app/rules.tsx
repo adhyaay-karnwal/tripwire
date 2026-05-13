@@ -322,12 +322,28 @@ function RulesPage() {
 	});
 
 	const ruleConfigureProps = useCallback(
-		(key: keyof RuleConfig) => ({
-			configureOpen: configureFlag && configureRule === key,
-			onConfigureOpenChange: (open: boolean) =>
-				setConfigureParams(open ? { rule: key, configure: true } : { rule: null, configure: false }),
-		}),
-		[configureFlag, configureRule, setConfigureParams],
+		(key: keyof RuleConfig) => {
+			const rule = activeConfig[key];
+			const scopeOverride =
+				rule && typeof rule === "object" && "scopeOverride" in rule
+					? (rule.scopeOverride as
+							| { pullRequests?: boolean; issues?: boolean; comments?: boolean }
+							| undefined)
+					: undefined;
+			return {
+				configureOpen: configureFlag && configureRule === key,
+				onConfigureOpenChange: (open: boolean) =>
+					setConfigureParams(open ? { rule: key, configure: true } : { rule: null, configure: false }),
+				globalScope: activeConfig.contentScope,
+				scopeOverride,
+				onScopeOverrideChange: (
+					next:
+						| { pullRequests?: boolean; issues?: boolean; comments?: boolean }
+						| undefined,
+				) => updateRuleValue(key, { scopeOverride: next } as never),
+			};
+		},
+		[activeConfig, configureFlag, configureRule, setConfigureParams, updateRuleValue],
 	);
 
 	const requestsQuery = useQuery(

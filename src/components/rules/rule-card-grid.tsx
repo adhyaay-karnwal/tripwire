@@ -42,6 +42,18 @@ interface NumericConfig {
 	onChange: (value: number) => void;
 }
 
+export interface RuleScopeOverride {
+	pullRequests?: boolean;
+	issues?: boolean;
+	comments?: boolean;
+}
+
+export interface RepoContentScope {
+	pullRequests: boolean;
+	issues: boolean;
+	comments: boolean;
+}
+
 interface RuleCardGridProps {
 	title: ReactNode;
 	/** Plain title for the modal header (no dropdowns) */
@@ -65,6 +77,12 @@ interface RuleCardGridProps {
 	configureOpen?: boolean;
 	/** Called when the controlled Configure dialog wants to open/close. */
 	onConfigureOpenChange?: (open: boolean) => void;
+	/** Repo-wide content-scope defaults (the "watching" toggles in the sidebar). */
+	globalScope?: RepoContentScope;
+	/** Per-rule override on top of globalScope. Undefined fields inherit. */
+	scopeOverride?: RuleScopeOverride;
+	/** Called when the user toggles a specific content type in the modal. */
+	onScopeOverrideChange?: (override: RuleScopeOverride | undefined) => void;
 }
 
 export function RuleCardGrid({
@@ -81,6 +99,9 @@ export function RuleCardGrid({
 	configureHint,
 	configureOpen: configureOpenProp,
 	onConfigureOpenChange,
+	globalScope,
+	scopeOverride,
+	onScopeOverrideChange,
 }: RuleCardGridProps) {
 	const [internalConfigureOpen, setInternalConfigureOpen] = useState(false);
 	const configureOpen = configureOpenProp ?? internalConfigureOpen;
@@ -359,6 +380,15 @@ export function RuleCardGrid({
 							</div>
 						)}
 
+						{/* Content scope override */}
+						{globalScope && onScopeOverrideChange && (
+							<ScopeOverrideSection
+								global={globalScope}
+								override={scopeOverride}
+								onChange={onScopeOverrideChange}
+							/>
+						)}
+
 						{/* Uninstall button */}
 						<Button
 							variant="ghost"
@@ -375,5 +405,91 @@ export function RuleCardGrid({
 				</DialogContent>
 			</Dialog>
 		</>
+	);
+}
+
+interface ScopeOverrideSectionProps {
+	global: RepoContentScope;
+	override: RuleScopeOverride | undefined;
+	onChange: (next: RuleScopeOverride | undefined) => void;
+}
+
+const SCOPE_TYPES: ReadonlyArray<{ key: keyof RepoContentScope; label: string }> = [
+	{ key: "pullRequests", label: "Pull requests" },
+	{ key: "issues", label: "Issues" },
+	{ key: "comments", label: "Comments" },
+];
+
+function ScopeOverrideSection({ global, override, onChange }: ScopeOverrideSectionProps) {
+	const hasOverride = override !== undefined && Object.values(override).some((v) => v !== undefined);
+
+	const effective = (key: keyof RepoContentScope): boolean => {
+		const o = override?.[key];
+		return o !== undefined ? o : global[key];
+	};
+
+	const isOverridden = (key: keyof RepoContentScope): boolean =>
+		override?.[key] !== undefined;
+
+	const handleToggle = (key: keyof RepoContentScope) => {
+		const current = effective(key);
+		const next = !current;
+		// If the new value matches the global, clear the override for this key.
+		// Otherwise, set it.
+		const nextOverride: RuleScopeOverride = { ...(override ?? {}) };
+		if (next === global[key]) {
+			delete nextOverride[key];
+		} else {
+			nextOverride[key] = next;
+		}
+		const anyLeft = Object.values(nextOverride).some((v) => v !== undefined);
+		onChange(anyLeft ? nextOverride : undefined);
+	};
+
+	const handleReset = () => onChange(undefined);
+
+	return (
+		<div className="flex flex-col gap-2">
+			<div className="flex items-center justify-between">
+				<label className="text-[12px] font-medium text-tw-text-secondary">
+					Content scope
+				</label>
+				{hasOverride && (
+					<button
+						type="button"
+						onClick={handleReset}
+						className="text-[11px] text-tw-text-tertiary hover:text-tw-text-secondary transition-colors"
+					>
+						Reset to repo default
+					</button>
+				)}
+			</div>
+			<div className="flex flex-wrap items-center gap-1.5">
+				{SCOPE_TYPES.map(({ key, label }) => {
+					const on = effective(key);
+					const overridden = isOverridden(key);
+					return (
+						<Button
+							key={key}
+							variant="ghost"
+							size="xs"
+							onClick={() => handleToggle(key)}
+							className={`px-3 py-1.5 text-[12px] border whitespace-nowrap ${
+								on
+									? "bg-tw-accent/15 text-tw-accent border-tw-accent/40"
+									: "bg-transparent text-tw-text-tertiary border-tw-border hover:border-tw-text-tertiary hover:text-tw-text-secondary"
+							} ${overridden ? "ring-1 ring-tw-accent/20" : ""}`}
+						>
+							{label}
+						</Button>
+					);
+				})}
+			</div>
+			<p className="text-[11px] text-tw-text-tertiary leading-snug">
+				{hasOverride
+					? "Override active — this rule ignores the repo's watching settings for the highlighted types."
+					: "Inherits the repo's Watching settings. Tap to override per content type."}
+			</p>
+		</div>
 	);
 }

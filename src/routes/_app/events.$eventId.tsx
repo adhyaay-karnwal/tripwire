@@ -217,8 +217,10 @@ function EventDetailPage() {
 							{/* Show what Tripwire already did */}
 							{isAlreadyActioned(displayEvent?.action) && (
 								<div className="flex items-center gap-2 px-3 py-2 rounded-[10px] bg-tw-inner text-[13px] text-tw-text-secondary">
-									<CheckIcon />
-									<span>Tripwire {getActionedLabel(displayEvent?.action)}</span>
+									<ShieldCheckIcon />
+									<span>
+									Tripwire {getActionedLabel(displayEvent?.action, displayEvent?.severity)}
+								</span>
 								</div>
 							)}
 							{/* Blacklist option */}
@@ -256,7 +258,7 @@ function EventDetailPage() {
 								}}
 								disabled={whitelistMutation.isPending}
 							>
-								<CheckIcon />
+								<UserPlusIcon />
 								{whitelistMutation.isPending ? "Adding..." : "Add to whitelist"}
 							</ActionPill>
 						</>
@@ -272,7 +274,7 @@ function EventDetailPage() {
 							)}
 							{actionStatus === "safe" && (
 								<>
-									<CheckIcon />
+									<UserPlusIcon />
 									<span className="text-tw-text-primary">
 										@{username} added to whitelist
 									</span>
@@ -613,15 +615,41 @@ function ShieldIcon() {
 	);
 }
 
-function CheckIcon() {
+function ShieldCheckIcon() {
 	return (
 		<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
 			<path
-				d="M5 12L10 17L20 7"
+				d="M12 2L4 5V11C4 16 7.5 20.5 12 22C16.5 20.5 20 16 20 11V5L12 2Z"
+				stroke="currentColor"
+				strokeWidth="1.8"
+				strokeLinejoin="round"
+			/>
+			<path
+				d="M8.75 12L11 14.25L15.25 10"
 				stroke="currentColor"
 				strokeWidth="1.8"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
+
+function UserPlusIcon() {
+	return (
+		<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+			<circle cx="9" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.8" />
+			<path
+				d="M3.5 19.5C3.5 16.46 5.96 14 9 14C12.04 14 14.5 16.46 14.5 19.5"
+				stroke="currentColor"
+				strokeWidth="1.8"
+				strokeLinecap="round"
+			/>
+			<path
+				d="M18.5 8.5V14.5M21.5 11.5H15.5"
+				stroke="currentColor"
+				strokeWidth="1.8"
+				strokeLinecap="round"
 			/>
 		</svg>
 	);
@@ -741,6 +769,8 @@ function TimelineRow({
 function isAlreadyActioned(action: string | undefined): boolean {
 	const actionedActions = [
 		"pipeline_blocked",
+		"pipeline_warned",
+		"pipeline_logged",
 		"pr_closed",
 		"issue_closed",
 		"issue_deleted",
@@ -750,9 +780,20 @@ function isAlreadyActioned(action: string | undefined): boolean {
 	return action ? actionedActions.includes(action) : false;
 }
 
-function getActionedLabel(action: string | undefined): string {
+function getActionedLabel(
+	action: string | undefined,
+	severity?: string | null,
+): string {
+	// Legacy events emitted pipeline_blocked for warn/log outcomes too;
+	// fall back to severity so historical rows render the right verb.
+	if (action === "pipeline_blocked") {
+		if (severity === "warning") return "flagged this content";
+		if (severity === "info") return "logged this content";
+		return "blocked this content";
+	}
 	const labels: Record<string, string> = {
-		pipeline_blocked: "blocked this content",
+		pipeline_warned: "flagged this content",
+		pipeline_logged: "logged this content",
 		pr_closed: "closed this PR",
 		issue_closed: "closed this issue",
 		issue_deleted: "deleted this issue",

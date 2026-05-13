@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OauthConsentRouteImport } from './routes/oauth.consent'
+import { Route as ApiMcpRouteImport } from './routes/api.mcp'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppSearchRouteImport } from './routes/_app/search'
@@ -20,9 +22,12 @@ import { Route as AppIntegrationsRouteImport } from './routes/_app/integrations'
 import { Route as AppInsightsRouteImport } from './routes/_app/insights'
 import { Route as AppHomeRouteImport } from './routes/_app/home'
 import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known].oauth-protected-resource'
+import { Route as Char91DotwellKnownChar93OauthAuthorizationServerRouteImport } from './routes/[.well-known].oauth-authorization-server'
 import { Route as AppEventsIndexRouteImport } from './routes/_app/events.index'
 import { Route as RequestOwnerRepoRouteImport } from './routes/request.$owner.$repo'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
+import { Route as ApiOauthAppInfoRouteImport } from './routes/api.oauth.app-info'
 import { Route as ApiGithubWebhookRouteImport } from './routes/api.github.webhook'
 import { Route as ApiGithubInstallRouteImport } from './routes/api.github.install'
 import { Route as ApiGithubCallbackRouteImport } from './routes/api.github.callback'
@@ -32,6 +37,8 @@ import { Route as AppSettingsBillingRouteImport } from './routes/_app/settings/b
 import { Route as AppSettingsAccountRouteImport } from './routes/_app/settings/account'
 import { Route as AppEventsEventIdRouteImport } from './routes/_app/events.$eventId'
 import { Route as AppChatChatIdRouteImport } from './routes/_app/chat.$chatId'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceSplatRouteImport } from './routes/[.well-known].oauth-protected-resource.$'
+import { Route as Char91DotwellKnownChar93OauthAuthorizationServerSplatRouteImport } from './routes/[.well-known].oauth-authorization-server.$'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -45,6 +52,16 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthConsentRoute = OauthConsentRouteImport.update({
+  id: '/oauth/consent',
+  path: '/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMcpRoute = ApiMcpRouteImport.update({
+  id: '/api/mcp',
+  path: '/api/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
@@ -87,6 +104,18 @@ const AppAutomationsRoute = AppAutomationsRouteImport.update({
   path: '/automations',
   getParentRoute: () => AppRoute,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotwellKnownChar93OauthAuthorizationServerRoute =
+  Char91DotwellKnownChar93OauthAuthorizationServerRouteImport.update({
+    id: '/.well-known/oauth-authorization-server',
+    path: '/.well-known/oauth-authorization-server',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AppEventsIndexRoute = AppEventsIndexRouteImport.update({
   id: '/events/',
   path: '/events/',
@@ -100,6 +129,11 @@ const RequestOwnerRepoRoute = RequestOwnerRepoRouteImport.update({
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   id: '/api/trpc/$',
   path: '/api/trpc/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOauthAppInfoRoute = ApiOauthAppInfoRouteImport.update({
+  id: '/api/oauth/app-info',
+  path: '/api/oauth/app-info',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGithubWebhookRoute = ApiGithubWebhookRouteImport.update({
@@ -147,10 +181,24 @@ const AppChatChatIdRoute = AppChatChatIdRouteImport.update({
   path: '/chat/$chatId',
   getParentRoute: () => AppRoute,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceSplatRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceSplatRouteImport.update({
+    id: '/$',
+    path: '/$',
+    getParentRoute: () => Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  } as any)
+const Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute =
+  Char91DotwellKnownChar93OauthAuthorizationServerSplatRouteImport.update({
+    id: '/$',
+    path: '/$',
+    getParentRoute: () => Char91DotwellKnownChar93OauthAuthorizationServerRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/.well-known/oauth-authorization-server': typeof Char91DotwellKnownChar93OauthAuthorizationServerRouteWithChildren
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRouteWithChildren
   '/automations': typeof AppAutomationsRoute
   '/home': typeof AppHomeRoute
   '/insights': typeof AppInsightsRoute
@@ -159,6 +207,10 @@ export interface FileRoutesByFullPath {
   '/search': typeof AppSearchRoute
   '/settings': typeof AppSettingsRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/api/mcp': typeof ApiMcpRoute
+  '/oauth/consent': typeof OauthConsentRoute
+  '/.well-known/oauth-authorization-server/$': typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
+  '/.well-known/oauth-protected-resource/$': typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
   '/chat/$chatId': typeof AppChatChatIdRoute
   '/events/$eventId': typeof AppEventsEventIdRoute
   '/settings/account': typeof AppSettingsAccountRoute
@@ -168,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
+  '/api/oauth/app-info': typeof ApiOauthAppInfoRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/events/': typeof AppEventsIndexRoute
@@ -175,6 +228,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/.well-known/oauth-authorization-server': typeof Char91DotwellKnownChar93OauthAuthorizationServerRouteWithChildren
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRouteWithChildren
   '/automations': typeof AppAutomationsRoute
   '/home': typeof AppHomeRoute
   '/insights': typeof AppInsightsRoute
@@ -183,6 +238,10 @@ export interface FileRoutesByTo {
   '/search': typeof AppSearchRoute
   '/settings': typeof AppSettingsRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/api/mcp': typeof ApiMcpRoute
+  '/oauth/consent': typeof OauthConsentRoute
+  '/.well-known/oauth-authorization-server/$': typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
+  '/.well-known/oauth-protected-resource/$': typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
   '/chat/$chatId': typeof AppChatChatIdRoute
   '/events/$eventId': typeof AppEventsEventIdRoute
   '/settings/account': typeof AppSettingsAccountRoute
@@ -192,6 +251,7 @@ export interface FileRoutesByTo {
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
+  '/api/oauth/app-info': typeof ApiOauthAppInfoRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/events': typeof AppEventsIndexRoute
@@ -201,6 +261,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/.well-known/oauth-authorization-server': typeof Char91DotwellKnownChar93OauthAuthorizationServerRouteWithChildren
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRouteWithChildren
   '/_app/automations': typeof AppAutomationsRoute
   '/_app/home': typeof AppHomeRoute
   '/_app/insights': typeof AppInsightsRoute
@@ -209,6 +271,10 @@ export interface FileRoutesById {
   '/_app/search': typeof AppSearchRoute
   '/_app/settings': typeof AppSettingsRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/api/mcp': typeof ApiMcpRoute
+  '/oauth/consent': typeof OauthConsentRoute
+  '/.well-known/oauth-authorization-server/$': typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
+  '/.well-known/oauth-protected-resource/$': typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
   '/_app/chat/$chatId': typeof AppChatChatIdRoute
   '/_app/events/$eventId': typeof AppEventsEventIdRoute
   '/_app/settings/account': typeof AppSettingsAccountRoute
@@ -218,6 +284,7 @@ export interface FileRoutesById {
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
+  '/api/oauth/app-info': typeof ApiOauthAppInfoRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/_app/events/': typeof AppEventsIndexRoute
@@ -227,6 +294,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/.well-known/oauth-authorization-server'
+    | '/.well-known/oauth-protected-resource'
     | '/automations'
     | '/home'
     | '/insights'
@@ -235,6 +304,10 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/api/chat'
+    | '/api/mcp'
+    | '/oauth/consent'
+    | '/.well-known/oauth-authorization-server/$'
+    | '/.well-known/oauth-protected-resource/$'
     | '/chat/$chatId'
     | '/events/$eventId'
     | '/settings/account'
@@ -244,6 +317,7 @@ export interface FileRouteTypes {
     | '/api/github/callback'
     | '/api/github/install'
     | '/api/github/webhook'
+    | '/api/oauth/app-info'
     | '/api/trpc/$'
     | '/request/$owner/$repo'
     | '/events/'
@@ -251,6 +325,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/.well-known/oauth-authorization-server'
+    | '/.well-known/oauth-protected-resource'
     | '/automations'
     | '/home'
     | '/insights'
@@ -259,6 +335,10 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/api/chat'
+    | '/api/mcp'
+    | '/oauth/consent'
+    | '/.well-known/oauth-authorization-server/$'
+    | '/.well-known/oauth-protected-resource/$'
     | '/chat/$chatId'
     | '/events/$eventId'
     | '/settings/account'
@@ -268,6 +348,7 @@ export interface FileRouteTypes {
     | '/api/github/callback'
     | '/api/github/install'
     | '/api/github/webhook'
+    | '/api/oauth/app-info'
     | '/api/trpc/$'
     | '/request/$owner/$repo'
     | '/events'
@@ -276,6 +357,8 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/login'
+    | '/.well-known/oauth-authorization-server'
+    | '/.well-known/oauth-protected-resource'
     | '/_app/automations'
     | '/_app/home'
     | '/_app/insights'
@@ -284,6 +367,10 @@ export interface FileRouteTypes {
     | '/_app/search'
     | '/_app/settings'
     | '/api/chat'
+    | '/api/mcp'
+    | '/oauth/consent'
+    | '/.well-known/oauth-authorization-server/$'
+    | '/.well-known/oauth-protected-resource/$'
     | '/_app/chat/$chatId'
     | '/_app/events/$eventId'
     | '/_app/settings/account'
@@ -293,6 +380,7 @@ export interface FileRouteTypes {
     | '/api/github/callback'
     | '/api/github/install'
     | '/api/github/webhook'
+    | '/api/oauth/app-info'
     | '/api/trpc/$'
     | '/request/$owner/$repo'
     | '/_app/events/'
@@ -302,11 +390,16 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  Char91DotwellKnownChar93OauthAuthorizationServerRoute: typeof Char91DotwellKnownChar93OauthAuthorizationServerRouteWithChildren
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
+  ApiMcpRoute: typeof ApiMcpRoute
+  OauthConsentRoute: typeof OauthConsentRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiGithubCallbackRoute: typeof ApiGithubCallbackRoute
   ApiGithubInstallRoute: typeof ApiGithubInstallRoute
   ApiGithubWebhookRoute: typeof ApiGithubWebhookRoute
+  ApiOauthAppInfoRoute: typeof ApiOauthAppInfoRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
   RequestOwnerRepoRoute: typeof RequestOwnerRepoRoute
 }
@@ -332,6 +425,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/consent': {
+      id: '/oauth/consent'
+      path: '/oauth/consent'
+      fullPath: '/oauth/consent'
+      preLoaderRoute: typeof OauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp': {
+      id: '/api/mcp'
+      path: '/api/mcp'
+      fullPath: '/api/mcp'
+      preLoaderRoute: typeof ApiMcpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -390,6 +497,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAutomationsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-authorization-server': {
+      id: '/.well-known/oauth-authorization-server'
+      path: '/.well-known/oauth-authorization-server'
+      fullPath: '/.well-known/oauth-authorization-server'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthAuthorizationServerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/events/': {
       id: '/_app/events/'
       path: '/events'
@@ -409,6 +530,13 @@ declare module '@tanstack/react-router' {
       path: '/api/trpc/$'
       fullPath: '/api/trpc/$'
       preLoaderRoute: typeof ApiTrpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/oauth/app-info': {
+      id: '/api/oauth/app-info'
+      path: '/api/oauth/app-info'
+      fullPath: '/api/oauth/app-info'
+      preLoaderRoute: typeof ApiOauthAppInfoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/github/webhook': {
@@ -474,6 +602,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppChatChatIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/.well-known/oauth-protected-resource/$': {
+      id: '/.well-known/oauth-protected-resource/$'
+      path: '/$'
+      fullPath: '/.well-known/oauth-protected-resource/$'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRouteImport
+      parentRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+    }
+    '/.well-known/oauth-authorization-server/$': {
+      id: '/.well-known/oauth-authorization-server/$'
+      path: '/$'
+      fullPath: '/.well-known/oauth-authorization-server/$'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRouteImport
+      parentRoute: typeof Char91DotwellKnownChar93OauthAuthorizationServerRoute
+    }
   }
 }
 
@@ -521,15 +663,52 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface Char91DotwellKnownChar93OauthAuthorizationServerRouteChildren {
+  Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute: typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
+}
+
+const Char91DotwellKnownChar93OauthAuthorizationServerRouteChildren: Char91DotwellKnownChar93OauthAuthorizationServerRouteChildren =
+  {
+    Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute:
+      Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute,
+  }
+
+const Char91DotwellKnownChar93OauthAuthorizationServerRouteWithChildren =
+  Char91DotwellKnownChar93OauthAuthorizationServerRoute._addFileChildren(
+    Char91DotwellKnownChar93OauthAuthorizationServerRouteChildren,
+  )
+
+interface Char91DotwellKnownChar93OauthProtectedResourceRouteChildren {
+  Char91DotwellKnownChar93OauthProtectedResourceSplatRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
+}
+
+const Char91DotwellKnownChar93OauthProtectedResourceRouteChildren: Char91DotwellKnownChar93OauthProtectedResourceRouteChildren =
+  {
+    Char91DotwellKnownChar93OauthProtectedResourceSplatRoute:
+      Char91DotwellKnownChar93OauthProtectedResourceSplatRoute,
+  }
+
+const Char91DotwellKnownChar93OauthProtectedResourceRouteWithChildren =
+  Char91DotwellKnownChar93OauthProtectedResourceRoute._addFileChildren(
+    Char91DotwellKnownChar93OauthProtectedResourceRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  Char91DotwellKnownChar93OauthAuthorizationServerRoute:
+    Char91DotwellKnownChar93OauthAuthorizationServerRouteWithChildren,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
+  ApiMcpRoute: ApiMcpRoute,
+  OauthConsentRoute: OauthConsentRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiGithubCallbackRoute: ApiGithubCallbackRoute,
   ApiGithubInstallRoute: ApiGithubInstallRoute,
   ApiGithubWebhookRoute: ApiGithubWebhookRoute,
+  ApiOauthAppInfoRoute: ApiOauthAppInfoRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
   RequestOwnerRepoRoute: RequestOwnerRepoRoute,
 }

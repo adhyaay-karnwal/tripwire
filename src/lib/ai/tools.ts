@@ -14,6 +14,7 @@ import {
 	RULE_KEYS,
 	type EventAction,
 	type RuleConfig,
+	type RuleKey,
 } from "#/db/schema";
 import { ruleConfigSchema } from "#/lib/rules/config-schema";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -228,10 +229,7 @@ function getRuleDetail(ruleId: string, config: Record<string, unknown>): string 
 	return undefined;
 }
 
-// Structural keys (contentScope, repoFiles) are excluded — only actual rules
-// are exposed to the AI tool surface.
-const VALID_RULE_IDS = new Set<string>(RULE_KEYS);
-const VALID_RULE_IDS_LIST = RULE_KEYS.join(", ");
+const ruleIdEnum = z.enum(RULE_KEYS);
 
 export const getRuleConfigDef = toolDefinition({
 	name: "get_rule_config",
@@ -243,10 +241,9 @@ export const getRuleConfigDef = toolDefinition({
 
 export const toggleRuleDef = toolDefinition({
 	name: "toggle_rule",
-	description:
-		`Enable or disable a specific rule. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
+	description: "Enable or disable a specific rule.",
 	inputSchema: z.object({
-		ruleId: z.string(),
+		ruleId: ruleIdEnum,
 		enabled: z.boolean(),
 	}),
 	outputSchema: specSchema,
@@ -256,9 +253,9 @@ export const toggleRuleDef = toolDefinition({
 export const updateRuleActionDef = toolDefinition({
 	name: "update_rule_action",
 	description:
-		`Change a rule's action level. Actions: 'block' (close PR/issue), 'warn' (leave comment), 'log' (record silently), 'threshold' (ignore until N violations then block). Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
+		"Change a rule's action level. 'block' closes the PR/issue, 'warn' leaves it open with a comment, 'log' records silently, 'threshold' counts violations per user and blocks at thresholdCount (pass thresholdCount when action='threshold').",
 	inputSchema: z.object({
-		ruleId: z.string(),
+		ruleId: ruleIdEnum,
 		action: z.enum(["block", "warn", "log", "threshold"]),
 		thresholdCount: z.number().optional(),
 	}),
@@ -266,15 +263,90 @@ export const updateRuleActionDef = toolDefinition({
 	needsApproval: true,
 });
 
-export const updateRuleValueDef = toolDefinition({
-	name: "update_rule_value",
+// ─── Typed per-rule value setters ───────────────────────────────
+// One tool per field. No free-form `field: string`, no value union.
+
+export const setMinMergedPrsDef = toolDefinition({
+	name: "set_min_merged_prs",
+	description: "Set the minimum-merged-PRs threshold. Authors with fewer merged PRs across GitHub trip the rule.",
+	inputSchema: z.object({ count: z.number().int().min(0) }),
+	outputSchema: specSchema,
+	needsApproval: true,
+});
+
+export const setAccountAgeDef = toolDefinition({
+	name: "set_account_age",
+	description: "Set the minimum account age in days.",
+	inputSchema: z.object({ days: z.number().int().min(0) }),
+	outputSchema: specSchema,
+	needsApproval: true,
+});
+
+export const setMaxPrsPerDayDef = toolDefinition({
+	name: "set_max_prs_per_day",
+	description: "Set the per-author daily PR cap.",
+	inputSchema: z.object({ limit: z.number().int().min(1) }),
+	outputSchema: specSchema,
+	needsApproval: true,
+});
+
+export const setMaxFilesChangedDef = toolDefinition({
+	name: "set_max_files_changed",
+	description: "Set the per-PR files-changed cap.",
+	inputSchema: z.object({ limit: z.number().int().min(1) }),
+	outputSchema: specSchema,
+	needsApproval: true,
+});
+
+export const setRepoActivityMinimumDef = toolDefinition({
+	name: "set_repo_activity_minimum",
+	description: "Set the minimum number of public non-fork repos an author must own.",
+	inputSchema: z.object({ minRepos: z.number().int().min(1) }),
+	outputSchema: specSchema,
+	needsApproval: true,
+});
+
+export const setLanguageRequirementDef = toolDefinition({
+	name: "set_language_requirement",
+	description: "Set the required content language (e.g. 'English', 'Spanish').",
+	inputSchema: z.object({ language: z.string().min(1) }),
+	outputSchema: specSchema,
+	needsApproval: true,
+});
+
+// ─── Scope tools ─────────────────────────────────────────────────
+
+export const setContentScopeDef = toolDefinition({
+	name: "set_content_scope",
 	description:
-		`Set a rule's numeric or string parameter. Valid fields per rule: minMergedPrs.count, accountAge.days, maxPrsPerDay.limit, maxFilesChanged.limit, repoActivityMinimum.minRepos, languageRequirement.language. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
+		"Set the repo-wide content scope — which content types the pipeline watches. Pass only the keys you want to change.",
 	inputSchema: z.object({
-		ruleId: z.string().meta({ description: "The rule ID (e.g. 'minMergedPrs', 'accountAge')" }),
-		field: z.string().meta({ description: "The field to update (e.g. 'count', 'days', 'limit', 'minRepos', 'language')" }),
-		value: z.union([z.number(), z.string()]).meta({ description: "The new value" }),
+		pullRequests: z.boolean().optional(),
+		issues: z.boolean().optional(),
+		comments: z.boolean().optional(),
 	}),
+	outputSchema: specSchema,
+	needsApproval: true,
+});
+
+export const setRuleScopeDef = toolDefinition({
+	name: "set_rule_scope",
+	description:
+		"Override which content types a single rule applies to, instead of inheriting the repo's contentScope. Pass only the keys you want to override. Example: setting issues=true on cryptoAddressDetection makes the crypto rule watch issues even if the rest of the pipeline doesn't.",
+	inputSchema: z.object({
+		ruleId: ruleIdEnum,
+		pullRequests: z.boolean().optional(),
+		issues: z.boolean().optional(),
+		comments: z.boolean().optional(),
+	}),
+	outputSchema: specSchema,
+	needsApproval: true,
+});
+
+export const clearRuleScopeDef = toolDefinition({
+	name: "clear_rule_scope",
+	description: "Remove a rule's scopeOverride entirely; the rule inherits the repo contentScope again.",
+	inputSchema: z.object({ ruleId: ruleIdEnum }),
 	outputSchema: specSchema,
 	needsApproval: true,
 });
@@ -339,6 +411,81 @@ async function getTokenForRepo(repoId: string): Promise<string | null> {
 	} catch {
 		return null;
 	}
+}
+
+function describeScope(scope: { pullRequests?: boolean; issues?: boolean; comments?: boolean }) {
+	const on: string[] = [];
+	const off: string[] = [];
+	const labels = { pullRequests: "PRs", issues: "issues", comments: "comments" } as const;
+	for (const k of ["pullRequests", "issues", "comments"] as const) {
+		if (scope[k] === true) on.push(labels[k]);
+		else if (scope[k] === false) off.push(labels[k]);
+	}
+	const parts: string[] = [];
+	if (on.length) parts.push(`on: ${on.join(", ")}`);
+	if (off.length) parts.push(`off: ${off.join(", ")}`);
+	return parts.join("; ") || "inherits";
+}
+
+interface MutationLog {
+	logDescription: string;
+	logMetadata: Record<string, unknown>;
+	successMessage: string;
+}
+
+async function applyRuleMutation(opts: {
+	repoId: string;
+	userId: string;
+	userName: string;
+	action: string;
+	mutate: (config: RuleConfig) => MutationLog;
+}) {
+	const { repoId, userId, userName, action, mutate } = opts;
+	await assertRepoOwner(userId, repoId);
+
+	const [configRow] = await db
+		.select()
+		.from(ruleConfigs)
+		.where(eq(ruleConfigs.repoId, repoId))
+		.limit(1);
+
+	const config = structuredClone((configRow?.config ?? DEFAULT_RULE_CONFIG)) as RuleConfig;
+	const log = mutate(config);
+
+	const parsed = ruleConfigSchema.safeParse(config);
+	if (!parsed.success) {
+		const issue = parsed.error.issues[0];
+		const path = issue?.path.join(".") ?? "config";
+		return makeSpec("ActionResult", {
+			success: false,
+			message: `Invalid rule config: ${path} — ${issue?.message ?? "validation failed"}.`,
+			action,
+		});
+	}
+
+	const nextConfig = parsed.data as RuleConfig;
+	if (configRow) {
+		await db
+			.update(ruleConfigs)
+			.set({ config: nextConfig, updatedAt: new Date() })
+			.where(eq(ruleConfigs.repoId, repoId));
+	} else {
+		await db.insert(ruleConfigs).values({ repoId, config: nextConfig });
+	}
+
+	await logEvent({
+		repoId,
+		action: "rule_config_updated",
+		severity: "info",
+		description: log.logDescription,
+		metadata: { updatedBy: userName, viaAI: true, ...log.logMetadata },
+	});
+
+	return makeSpec("ActionResult", {
+		success: true,
+		message: log.successMessage,
+		action,
+	});
 }
 
 export function createTripwireTools(ctx: ToolContext) {
@@ -983,194 +1130,199 @@ export function createTripwireTools(ctx: ToolContext) {
 
 		// ─── Toggle Rule ────────────────────────────────────────
 		toggleRuleDef.server(async ({ ruleId, enabled }) => {
-			await assertRepoOwner(userId, repoId);
-
-			if (!VALID_RULE_IDS.has(ruleId)) {
-				return makeSpec("ActionResult", {
-					success: false,
-					message: `Unknown rule: ${ruleId}. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
-					action: "toggle_rule",
-				});
-			}
-
-			const [configRow] = await db
-				.select()
-				.from(ruleConfigs)
-				.where(eq(ruleConfigs.repoId, repoId))
-				.limit(1);
-
-			const config = { ...(configRow?.config ?? DEFAULT_RULE_CONFIG) } as Record<string, Record<string, unknown>>;
-
-			config[ruleId] = { ...config[ruleId], enabled };
-
-			const parsed = ruleConfigSchema.safeParse(config);
-			if (!parsed.success) {
-				const issue = parsed.error.issues[0];
-				const path = issue?.path.join(".") ?? "config";
-				return makeSpec("ActionResult", {
-					success: false,
-					message: `Invalid rule config: ${path} — ${issue?.message ?? "validation failed"}.`,
-					action: "toggle_rule",
-				});
-			}
-
-			const nextConfig = parsed.data as RuleConfig;
-			if (configRow) {
-				await db
-					.update(ruleConfigs)
-					.set({ config: nextConfig, updatedAt: new Date() })
-					.where(eq(ruleConfigs.repoId, repoId));
-			} else {
-				await db.insert(ruleConfigs).values({ repoId, config: nextConfig });
-			}
-
-			const ruleName = RULE_NAMES[ruleId] ?? ruleId;
-
-			await logEvent({
+			const key = ruleId as RuleKey;
+			return applyRuleMutation({
 				repoId,
-				action: "rule_config_updated",
-				severity: "info",
-				description: `${ruleName} ${enabled ? "enabled" : "disabled"} by AI assistant`,
-				metadata: { updatedBy: userName, viaAI: true, ruleId, enabled },
-			});
-
-			return makeSpec("ActionResult", {
-				success: true,
-				message: `${ruleName} has been ${enabled ? "enabled" : "disabled"}.`,
+				userId,
+				userName,
 				action: "toggle_rule",
+				mutate: (config) => {
+					(config[key] as { enabled: boolean }).enabled = enabled;
+					const ruleName = RULE_NAMES[key] ?? key;
+					return {
+						logDescription: `${ruleName} ${enabled ? "enabled" : "disabled"} by AI assistant`,
+						logMetadata: { ruleId: key, enabled },
+						successMessage: `${ruleName} has been ${enabled ? "enabled" : "disabled"}.`,
+					};
+				},
 			});
 		}),
 
 		// ─── Update Rule Action ─────────────────────────────────
 		updateRuleActionDef.server(async ({ ruleId, action, thresholdCount }) => {
-			await assertRepoOwner(userId, repoId);
-
-			if (!VALID_RULE_IDS.has(ruleId)) {
-				return makeSpec("ActionResult", {
-					success: false,
-					message: `Unknown rule: ${ruleId}. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
-					action: "update_rule_action",
-				});
-			}
-
-			const [configRow] = await db
-				.select()
-				.from(ruleConfigs)
-				.where(eq(ruleConfigs.repoId, repoId))
-				.limit(1);
-
-			const config = { ...(configRow?.config ?? DEFAULT_RULE_CONFIG) } as Record<string, Record<string, unknown>>;
-
-			config[ruleId] = {
-				...config[ruleId],
-				action,
-				...(action === "threshold" && thresholdCount ? { thresholdCount } : {}),
-			};
-
-			const parsed = ruleConfigSchema.safeParse(config);
-			if (!parsed.success) {
-				const issue = parsed.error.issues[0];
-				const path = issue?.path.join(".") ?? "config";
-				return makeSpec("ActionResult", {
-					success: false,
-					message: `Invalid rule config: ${path} — ${issue?.message ?? "validation failed"}.`,
-					action: "update_rule_action",
-				});
-			}
-
-			const nextConfig = parsed.data as RuleConfig;
-			if (configRow) {
-				await db
-					.update(ruleConfigs)
-					.set({ config: nextConfig, updatedAt: new Date() })
-					.where(eq(ruleConfigs.repoId, repoId));
-			} else {
-				await db.insert(ruleConfigs).values({ repoId, config: nextConfig });
-			}
-
-			const ruleName = RULE_NAMES[ruleId] ?? ruleId;
-
-			await logEvent({
+			const key = ruleId as RuleKey;
+			return applyRuleMutation({
 				repoId,
-				action: "rule_config_updated",
-				severity: "info",
-				description: `${ruleName} action changed to ${action} by AI assistant`,
-				metadata: { updatedBy: userName, viaAI: true, ruleId, action, thresholdCount },
-			});
-
-			return makeSpec("ActionResult", {
-				success: true,
-				message: `${ruleName} action set to ${action}.${action === "threshold" && thresholdCount ? ` Threshold: ${thresholdCount} violations.` : ""}`,
+				userId,
+				userName,
 				action: "update_rule_action",
+				mutate: (config) => {
+					const rule = config[key] as { action: string; thresholdCount?: number };
+					rule.action = action;
+					if (action === "threshold" && thresholdCount !== undefined) {
+						rule.thresholdCount = thresholdCount;
+					}
+					const ruleName = RULE_NAMES[key] ?? key;
+					return {
+						logDescription: `${ruleName} action changed to ${action} by AI assistant`,
+						logMetadata: { ruleId: key, action, thresholdCount },
+						successMessage: `${ruleName} action set to ${action}.${action === "threshold" && thresholdCount ? ` Threshold: ${thresholdCount} violations.` : ""}`,
+					};
+				},
 			});
 		}),
 
-		// ─── Update Rule Value ──────────────────────────────────
-		updateRuleValueDef.server(async ({ ruleId, field, value }) => {
-			await assertRepoOwner(userId, repoId);
-
-			if (!VALID_RULE_IDS.has(ruleId)) {
-				return makeSpec("ActionResult", {
-					success: false,
-					message: `Unknown rule: ${ruleId}. Valid ruleIds: ${VALID_RULE_IDS_LIST}.`,
-					action: "update_rule_value",
-				});
-			}
-
-			// Don't allow setting core fields via this tool
-			if (field === "enabled" || field === "action") {
-				return makeSpec("ActionResult", {
-					success: false,
-					message: `Use the toggle_rule or update_rule_action tools to change '${field}'.`,
-					action: "update_rule_value",
-				});
-			}
-
-			const [configRow] = await db
-				.select()
-				.from(ruleConfigs)
-				.where(eq(ruleConfigs.repoId, repoId))
-				.limit(1);
-
-			const config = { ...(configRow?.config ?? DEFAULT_RULE_CONFIG) } as Record<string, Record<string, unknown>>;
-
-			config[ruleId] = { ...config[ruleId], [field]: value };
-
-			const parsed = ruleConfigSchema.safeParse(config);
-			if (!parsed.success) {
-				const issue = parsed.error.issues[0];
-				const path = issue?.path.join(".") ?? "config";
-				return makeSpec("ActionResult", {
-					success: false,
-					message: `Invalid rule config: ${path} — ${issue?.message ?? "validation failed"}.`,
-					action: "update_rule_value",
-				});
-			}
-
-			const nextConfig = parsed.data as RuleConfig;
-			if (configRow) {
-				await db
-					.update(ruleConfigs)
-					.set({ config: nextConfig, updatedAt: new Date() })
-					.where(eq(ruleConfigs.repoId, repoId));
-			} else {
-				await db.insert(ruleConfigs).values({ repoId, config: nextConfig });
-			}
-
-			const ruleName = RULE_NAMES[ruleId] ?? ruleId;
-
-			await logEvent({
-				repoId,
-				action: "rule_config_updated",
-				severity: "info",
-				description: `${ruleName} ${field} set to ${value} by AI assistant`,
-				metadata: { updatedBy: userName, viaAI: true, ruleId, field, value },
+		// ─── Typed per-rule value setters ────────────────────────
+		setMinMergedPrsDef.server(async ({ count }) => {
+			return applyRuleMutation({
+				repoId, userId, userName, action: "set_min_merged_prs",
+				mutate: (config) => {
+					config.minMergedPrs.count = count;
+					return {
+						logDescription: `Minimum Merged PRs count set to ${count} by AI assistant`,
+						logMetadata: { ruleId: "minMergedPrs", count },
+						successMessage: `Minimum Merged PRs count set to ${count}.`,
+					};
+				},
 			});
+		}),
 
-			return makeSpec("ActionResult", {
-				success: true,
-				message: `${ruleName} ${field} set to ${value}.`,
-				action: "update_rule_value",
+		setAccountAgeDef.server(async ({ days }) => {
+			return applyRuleMutation({
+				repoId, userId, userName, action: "set_account_age",
+				mutate: (config) => {
+					config.accountAge.days = days;
+					return {
+						logDescription: `Account Age days set to ${days} by AI assistant`,
+						logMetadata: { ruleId: "accountAge", days },
+						successMessage: `Account Age minimum set to ${days} days.`,
+					};
+				},
+			});
+		}),
+
+		setMaxPrsPerDayDef.server(async ({ limit }) => {
+			return applyRuleMutation({
+				repoId, userId, userName, action: "set_max_prs_per_day",
+				mutate: (config) => {
+					config.maxPrsPerDay.limit = limit;
+					return {
+						logDescription: `Max PRs Per Day limit set to ${limit} by AI assistant`,
+						logMetadata: { ruleId: "maxPrsPerDay", limit },
+						successMessage: `Max PRs Per Day set to ${limit}.`,
+					};
+				},
+			});
+		}),
+
+		setMaxFilesChangedDef.server(async ({ limit }) => {
+			return applyRuleMutation({
+				repoId, userId, userName, action: "set_max_files_changed",
+				mutate: (config) => {
+					config.maxFilesChanged.limit = limit;
+					return {
+						logDescription: `Max Files Changed limit set to ${limit} by AI assistant`,
+						logMetadata: { ruleId: "maxFilesChanged", limit },
+						successMessage: `Max Files Changed set to ${limit}.`,
+					};
+				},
+			});
+		}),
+
+		setRepoActivityMinimumDef.server(async ({ minRepos }) => {
+			return applyRuleMutation({
+				repoId, userId, userName, action: "set_repo_activity_minimum",
+				mutate: (config) => {
+					config.repoActivityMinimum.minRepos = minRepos;
+					return {
+						logDescription: `Repo Activity Minimum set to ${minRepos} by AI assistant`,
+						logMetadata: { ruleId: "repoActivityMinimum", minRepos },
+						successMessage: `Repo Activity Minimum set to ${minRepos} repos.`,
+					};
+				},
+			});
+		}),
+
+		setLanguageRequirementDef.server(async ({ language }) => {
+			return applyRuleMutation({
+				repoId, userId, userName, action: "set_language_requirement",
+				mutate: (config) => {
+					config.languageRequirement.language = language;
+					return {
+						logDescription: `Language Requirement set to ${language} by AI assistant`,
+						logMetadata: { ruleId: "languageRequirement", language },
+						successMessage: `Language Requirement set to ${language}.`,
+					};
+				},
+			});
+		}),
+
+		// ─── Scope tools ─────────────────────────────────────────
+		setContentScopeDef.server(async ({ pullRequests, issues, comments }) => {
+			if (pullRequests === undefined && issues === undefined && comments === undefined) {
+				return makeSpec("ActionResult", {
+					success: false,
+					message: "Provide at least one of pullRequests, issues, comments.",
+					action: "set_content_scope",
+				});
+			}
+			return applyRuleMutation({
+				repoId, userId, userName, action: "set_content_scope",
+				mutate: (config) => {
+					if (pullRequests !== undefined) config.contentScope.pullRequests = pullRequests;
+					if (issues !== undefined) config.contentScope.issues = issues;
+					if (comments !== undefined) config.contentScope.comments = comments;
+					return {
+						logDescription: `Content scope set to ${JSON.stringify(config.contentScope)} by AI assistant`,
+						logMetadata: { contentScope: config.contentScope },
+						successMessage: `Content scope: ${describeScope(config.contentScope)}.`,
+					};
+				},
+			});
+		}),
+
+		setRuleScopeDef.server(async ({ ruleId, pullRequests, issues, comments }) => {
+			if (pullRequests === undefined && issues === undefined && comments === undefined) {
+				return makeSpec("ActionResult", {
+					success: false,
+					message: "Provide at least one of pullRequests, issues, comments. Use clear_rule_scope to remove an override entirely.",
+					action: "set_rule_scope",
+				});
+			}
+			const key = ruleId as RuleKey;
+			return applyRuleMutation({
+				repoId, userId, userName, action: "set_rule_scope",
+				mutate: (config) => {
+					const rule = config[key] as RuleConfig[RuleKey];
+					const next = { ...(rule.scopeOverride ?? {}) };
+					if (pullRequests !== undefined) next.pullRequests = pullRequests;
+					if (issues !== undefined) next.issues = issues;
+					if (comments !== undefined) next.comments = comments;
+					rule.scopeOverride = next;
+					const ruleName = RULE_NAMES[key] ?? key;
+					return {
+						logDescription: `${ruleName} scopeOverride set to ${JSON.stringify(next)} by AI assistant`,
+						logMetadata: { ruleId: key, scopeOverride: next },
+						successMessage: `${ruleName} scope override → ${describeScope(next)}.`,
+					};
+				},
+			});
+		}),
+
+		clearRuleScopeDef.server(async ({ ruleId }) => {
+			const key = ruleId as RuleKey;
+			return applyRuleMutation({
+				repoId, userId, userName, action: "clear_rule_scope",
+				mutate: (config) => {
+					const rule = config[key] as RuleConfig[RuleKey];
+					rule.scopeOverride = undefined;
+					const ruleName = RULE_NAMES[key] ?? key;
+					return {
+						logDescription: `${ruleName} scopeOverride cleared by AI assistant`,
+						logMetadata: { ruleId: key },
+						successMessage: `${ruleName} scope override cleared.`,
+					};
+				},
 			});
 		}),
 
