@@ -129,24 +129,16 @@ export const Route = createFileRoute("/api/chat")({
 						}
 					}
 
-					// Sanitize corrupted messages from TanStack AI
-					// TODO: Remove when TanStack AI fixes tool approval state management
-					const messages = sanitizeMessages(rawMessages);
-
-					// Debug: log message structure to diagnose tool errors
-					if (process.env.NODE_ENV !== "production") {
-						const summary = messages.map((m: any, i: number) => {
-							const parts = m.parts?.map((p: any) => {
-								const id = p.toolCallId || p.id;
-								const idStr = id ? `(${String(id).slice(0, 8)})` : "";
-								const nameStr = p.name ? `:${p.name}` : "";
-								const stateStr = p.state ? `[${p.state}]` : "";
-								return `${p.type}${idStr}${nameStr}${stateStr}`;
-							}).join(", ") ?? "no-parts";
-							return `  [${i}] ${m.role}: ${parts}`;
-						}).join("\n");
-						console.log(`[Chat] ${messages.length} messages:\n${summary}`);
-					}
+					// We intentionally run executeApprovedTools BEFORE sanitizeMessages.
+					// sanitize strips tool-calls that don't have a paired tool-result in
+					// the same message (Pass 3 / Pass 4) — but for an approval-responded
+					// tool-call the result doesn't exist yet; executeApprovedTools is
+					// what produces it. If sanitize ran first it would wipe the approved
+					// call, leaving nothing for executeApprovedTools to find, and the
+					// model would just re-propose the same tool on every iteration. That
+					// is the approval-loop bug.
+					//
+					// So: run executeApprovedTools first to inject results, THEN sanitize.
 
 					let resolvedRepoId = repoId as string | undefined;
 
@@ -230,16 +222,32 @@ export const Route = createFileRoute("/api/chat")({
 						tripwireTools,
 					);
 
-					// Execute approved tool-calls that haven't been executed yet.
-					// When a tool has needsApproval, the client shows an approval UI.
-					// After approval, the client sends the messages back with the
-					// tool-call marked as "approval-responded" but without results.
-					// The server must execute them and inject results before chat().
-					await executeApprovedTools(messages, tools, {
+					// Execute approved tool-calls and inject their results into rawMessages
+					// in place. After this, sanitize will see paired call+result and keep
+					// them. (See the comment above the sanitize call for the loop bug
+					// this ordering avoids.)
+					await executeApprovedTools(rawMessages, tools, {
 						userId: ctx.user.id,
 						conversationId: String(conversationId ?? ""),
 						repoId: resolvedRepoId,
 					});
+
+					// Now sanitize, with the approved tool-results already in place.
+					const messages = sanitizeMessages(rawMessages);
+
+					if (process.env.NODE_ENV !== "production") {
+						const summary = messages.map((m: any, i: number) => {
+							const parts = m.parts?.map((p: any) => {
+								const id = p.toolCallId || p.id;
+								const idStr = id ? `(${String(id).slice(0, 8)})` : "";
+								const nameStr = p.name ? `:${p.name}` : "";
+								const stateStr = p.state ? `[${p.state}]` : "";
+								return `${p.type}${idStr}${nameStr}${stateStr}`;
+							}).join(", ") ?? "no-parts";
+							return `  [${i}] ${m.role}: ${parts}`;
+						}).join("\n");
+						console.log(`[Chat] ${messages.length} messages:\n${summary}`);
+					}
 
 					// Credit tracking middleware — accumulates tokens, computes credits, fires autumn.track()
 					const creditMiddleware = createCreditMiddleware({

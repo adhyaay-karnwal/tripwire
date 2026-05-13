@@ -27,6 +27,7 @@ import { Route as Char91DotwellKnownChar93OauthAuthorizationServerRouteImport } 
 import { Route as AppEventsIndexRouteImport } from './routes/_app/events.index'
 import { Route as RequestOwnerRepoRouteImport } from './routes/request.$owner.$repo'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
+import { Route as ApiToolsRunRouteImport } from './routes/api.tools.run'
 import { Route as ApiOauthAppInfoRouteImport } from './routes/api.oauth.app-info'
 import { Route as ApiGithubWebhookRouteImport } from './routes/api.github.webhook'
 import { Route as ApiGithubInstallRouteImport } from './routes/api.github.install'
@@ -131,6 +132,11 @@ const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   path: '/api/trpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiToolsRunRoute = ApiToolsRunRouteImport.update({
+  id: '/api/tools/run',
+  path: '/api/tools/run',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOauthAppInfoRoute = ApiOauthAppInfoRouteImport.update({
   id: '/api/oauth/app-info',
   path: '/api/oauth/app-info',
@@ -221,6 +227,7 @@ export interface FileRoutesByFullPath {
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/oauth/app-info': typeof ApiOauthAppInfoRoute
+  '/api/tools/run': typeof ApiToolsRunRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/events/': typeof AppEventsIndexRoute
@@ -252,6 +259,7 @@ export interface FileRoutesByTo {
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/oauth/app-info': typeof ApiOauthAppInfoRoute
+  '/api/tools/run': typeof ApiToolsRunRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/events': typeof AppEventsIndexRoute
@@ -285,6 +293,7 @@ export interface FileRoutesById {
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/oauth/app-info': typeof ApiOauthAppInfoRoute
+  '/api/tools/run': typeof ApiToolsRunRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/_app/events/': typeof AppEventsIndexRoute
@@ -318,6 +327,7 @@ export interface FileRouteTypes {
     | '/api/github/install'
     | '/api/github/webhook'
     | '/api/oauth/app-info'
+    | '/api/tools/run'
     | '/api/trpc/$'
     | '/request/$owner/$repo'
     | '/events/'
@@ -349,6 +359,7 @@ export interface FileRouteTypes {
     | '/api/github/install'
     | '/api/github/webhook'
     | '/api/oauth/app-info'
+    | '/api/tools/run'
     | '/api/trpc/$'
     | '/request/$owner/$repo'
     | '/events'
@@ -381,6 +392,7 @@ export interface FileRouteTypes {
     | '/api/github/install'
     | '/api/github/webhook'
     | '/api/oauth/app-info'
+    | '/api/tools/run'
     | '/api/trpc/$'
     | '/request/$owner/$repo'
     | '/_app/events/'
@@ -400,6 +412,7 @@ export interface RootRouteChildren {
   ApiGithubInstallRoute: typeof ApiGithubInstallRoute
   ApiGithubWebhookRoute: typeof ApiGithubWebhookRoute
   ApiOauthAppInfoRoute: typeof ApiOauthAppInfoRoute
+  ApiToolsRunRoute: typeof ApiToolsRunRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
   RequestOwnerRepoRoute: typeof RequestOwnerRepoRoute
 }
@@ -530,6 +543,13 @@ declare module '@tanstack/react-router' {
       path: '/api/trpc/$'
       fullPath: '/api/trpc/$'
       preLoaderRoute: typeof ApiTrpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tools/run': {
+      id: '/api/tools/run'
+      path: '/api/tools/run'
+      fullPath: '/api/tools/run'
+      preLoaderRoute: typeof ApiToolsRunRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/oauth/app-info': {
@@ -709,6 +729,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGithubInstallRoute: ApiGithubInstallRoute,
   ApiGithubWebhookRoute: ApiGithubWebhookRoute,
   ApiOauthAppInfoRoute: ApiOauthAppInfoRoute,
+  ApiToolsRunRoute: ApiToolsRunRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
   RequestOwnerRepoRoute: RequestOwnerRepoRoute,
 }

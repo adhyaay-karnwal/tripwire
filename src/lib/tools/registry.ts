@@ -86,6 +86,15 @@ export interface ToolDefinition<
 	lazy?: boolean;
 
 	/**
+	 * Whether the tool can be invoked directly from the UI (outside the chat
+	 * model loop), e.g. via a button on a rendered card. Defaults to false —
+	 * mutations and any tool that should only run after the model reasons
+	 * about it must keep this off. Useful for cheap follow-up reads like
+	 * "show the score breakdown" that should incur no LLM cost.
+	 */
+	directInvokable?: boolean;
+
+	/**
 	 * Run the tool. The first arg is the parsed input; the second is the
 	 * ambient ctx (userId + repoId etc).
 	 */

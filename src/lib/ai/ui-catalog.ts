@@ -157,6 +157,36 @@ export const catalog = defineCatalog(schema, {
 			description: "Shows the most blocked GitHub users ranked by total blocks",
 		},
 
+		// ─── Score Breakdown ──────────────────────────────────────────
+		ScoreBreakdown: {
+			props: z.object({
+				username: z.string(),
+				total: z.number(),
+				categories: z.array(
+					z.object({
+						id: z.enum([
+							"globalReputation",
+							"communitySignals",
+							"repoHistory",
+							"redFlags",
+							"floor",
+						]),
+						label: z.string(),
+						subtotal: z.number(),
+						max: z.number().nullable(),
+						items: z.array(
+							z.object({
+								reason: z.string(),
+								delta: z.number(),
+							}),
+						),
+					}),
+				),
+			}),
+			description:
+				"Explains a contributor score by listing every factor and its point delta, grouped by category",
+		},
+
 		// ─── Text Block ───────────────────────────────────────────────
 		Text: {
 			props: z.object({

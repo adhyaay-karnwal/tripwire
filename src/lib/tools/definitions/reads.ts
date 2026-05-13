@@ -26,7 +26,11 @@ import {
 	getPublicNonForkRepoCount,
 	hasProfileReadme,
 } from "#/lib/github/github-api";
-import { computeContributorScore } from "#/lib/ai/contributor-score";
+import {
+	type ScoreCategory,
+	type ScoreInput,
+	computeContributorScore,
+} from "#/lib/ai/contributor-score";
 import {
 	type AnyToolDefinition,
 	defineTool,
@@ -188,89 +192,122 @@ const getEvent = defineTool({
 
 // ─── lookup_user ─────────────────────────────────────────────────
 
-const lookupUser = defineTool({
-	name: "lookup_user",
-	description:
-		"Look up a GitHub user's profile and their Tripwire activity history for the current repo. Pass the username without @.",
-	inputSchema: z.object({ username: z.string().min(1) }),
-	handler: async ({ username }, ctx) => {
-		const repoId = requireRepoId(ctx);
-		await assertRepoOwner(ctx.userId, repoId);
+// ─── Shared user signal fetch ────────────────────────────────────
+// Used by both lookup_user (UserCard) and score_breakdown (ScoreBreakdown).
 
-		const token = await getTokenForRepo(repoId);
-		const [repoRow] = await db
-			.select({ fullName: repositories.fullName })
-			.from(repositories)
-			.where(eq(repositories.id, repoId))
-			.limit(1);
-		const contextRepoFullName = repoRow?.fullName ?? "";
+interface UserSignals {
+	ghUser: GitHubUser;
+	scoreInput: ScoreInput;
+	status: "normal" | "blacklisted" | "whitelisted";
+	badges: string[];
+}
 
-		const [
-			ghUser,
-			whitelist,
-			blacklist,
-			allEvents,
-			mergedPrs,
-			closedPrs,
-			publicNonForkRepos,
-			publicForkRepos,
-			prsToThisRepo,
-			profileReadme,
-			graphqlData,
-			achievements,
-		] = await Promise.all([
-			fetchGitHubUser(username, token ?? undefined),
-			db
-				.select()
-				.from(whitelistEntries)
-				.where(
-					and(
-						eq(whitelistEntries.repoId, repoId),
-						usernameEq(whitelistEntries.githubUsername, username),
-					),
-				)
-				.limit(1),
-			db
-				.select()
-				.from(blacklistEntries)
-				.where(
-					and(
-						eq(blacklistEntries.repoId, repoId),
-						usernameEq(blacklistEntries.githubUsername, username),
-					),
-				)
-				.limit(1),
-			db
-				.select()
-				.from(events)
-				.where(
-					and(
-						eq(events.repoId, repoId),
-						usernameEq(events.targetGithubUsername, username),
-					),
+async function gatherUserSignals(
+	username: string,
+	userId: string,
+	repoId: string,
+): Promise<UserSignals> {
+	await assertRepoOwner(userId, repoId);
+	const token = await getTokenForRepo(repoId);
+	const [repoRow] = await db
+		.select({ fullName: repositories.fullName })
+		.from(repositories)
+		.where(eq(repositories.id, repoId))
+		.limit(1);
+	const contextRepoFullName = repoRow?.fullName ?? "";
+
+	const [
+		ghUser,
+		whitelist,
+		blacklist,
+		allEvents,
+		reputationRow,
+		mergedPrs,
+		closedPrs,
+		publicNonForkRepos,
+		publicForkRepos,
+		prsToThisRepo,
+		profileReadme,
+		graphqlData,
+		achievements,
+	] = await Promise.all([
+		fetchGitHubUser(username, token ?? undefined),
+		db
+			.select()
+			.from(whitelistEntries)
+			.where(
+				and(
+					eq(whitelistEntries.repoId, repoId),
+					usernameEq(whitelistEntries.githubUsername, username),
 				),
-			token ? getMergedPrCount(token, username).catch(() => 0) : Promise.resolve(0),
-			token ? getClosedPrCount(token, username).catch(() => 0) : Promise.resolve(0),
-			token ? getPublicNonForkRepoCount(token, username).catch(() => 0) : Promise.resolve(0),
-			token ? getPublicForkRepoCount(token, username).catch(() => 0) : Promise.resolve(0),
-			token && contextRepoFullName
-				? getContextRepoPrCount(token, username, contextRepoFullName).catch(() => 0)
-				: Promise.resolve(0),
-			token ? hasProfileReadme(token, username).catch(() => false) : Promise.resolve(false),
-			token ? fetchUserGraphQL(token, username).catch(() => null) : Promise.resolve(null),
-			fetchUserAchievements(username).catch(() => []),
-		]);
+			)
+			.limit(1),
+		db
+			.select()
+			.from(blacklistEntries)
+			.where(
+				and(
+					eq(blacklistEntries.repoId, repoId),
+					usernameEq(blacklistEntries.githubUsername, username),
+				),
+			)
+			.limit(1),
+		db
+			.select()
+			.from(events)
+			.where(
+				and(
+					eq(events.repoId, repoId),
+					usernameEq(events.targetGithubUsername, username),
+				),
+			),
+		db
+			.select({ scoreResetAt: githubReputation.scoreResetAt })
+			.from(githubReputation)
+			.where(
+				and(
+					eq(githubReputation.repoId, repoId),
+					sql`lower(${githubReputation.githubUsername}) = ${username.toLowerCase()}`,
+				),
+			)
+			.limit(1),
+		token ? getMergedPrCount(token, username).catch(() => 0) : Promise.resolve(0),
+		token ? getClosedPrCount(token, username).catch(() => 0) : Promise.resolve(0),
+		token ? getPublicNonForkRepoCount(token, username).catch(() => 0) : Promise.resolve(0),
+		token ? getPublicForkRepoCount(token, username).catch(() => 0) : Promise.resolve(0),
+		token && contextRepoFullName
+			? getContextRepoPrCount(token, username, contextRepoFullName).catch(() => 0)
+			: Promise.resolve(0),
+		token ? hasProfileReadme(token, username).catch(() => false) : Promise.resolve(false),
+		token ? fetchUserGraphQL(token, username).catch(() => null) : Promise.resolve(null),
+		fetchUserAchievements(username).catch(() => []),
+	]);
 
-		const closedUnmergedPrs = Math.max(0, closedPrs - mergedPrs);
+	const scoreResetAt = reputationRow[0]?.scoreResetAt ?? null;
+	const countsAfterReset = scoreResetAt
+		? allEvents.filter((e) => e.createdAt > scoreResetAt)
+		: allEvents;
 
-		const blockedCount = allEvents.filter((e) => e.action === "pipeline_blocked").length;
-		const allowedCount = allEvents.filter((e) => e.action === "pipeline_allowed").length;
-		const nearMissCount = allEvents.filter((e) => e.action === "rule_near_miss").length;
+	const closedUnmergedPrs = Math.max(0, closedPrs - mergedPrs);
+	const blockedCount = countsAfterReset.filter((e) => e.action === "pipeline_blocked").length;
+	const allowedCount = countsAfterReset.filter((e) => e.action === "pipeline_allowed").length;
+	const nearMissCount = countsAfterReset.filter((e) => e.action === "rule_near_miss").length;
+	const createdAt = ghUser.created_at ? new Date(ghUser.created_at) : new Date();
+	const accountAgeDays = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
 
-		const createdAt = ghUser.created_at ? new Date(ghUser.created_at) : new Date();
-		const accountAgeDays = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
+	const badges: string[] = [];
+	if (graphqlData?.isGitHubStar) badges.push("GitHub Star");
+	if (graphqlData?.isBountyHunter) badges.push("Bug Bounty Hunter");
+	if (graphqlData?.isDeveloperProgramMember) badges.push("Dev Program");
+	if (graphqlData?.isCampusExpert) badges.push("Campus Expert");
+	if (graphqlData?.isSiteAdmin) badges.push("GitHub Staff");
 
-		const score = computeContributorScore({
+	const status: UserSignals["status"] =
+		blacklist.length > 0 ? "blacklisted" : whitelist.length > 0 ? "whitelisted" : "normal";
+
+	return {
+		ghUser,
+		scoreInput: {
 			accountAgeDays,
 			followers: ghUser.followers ?? 0,
 			following: ghUser.following ?? 0,
@@ -294,43 +331,42 @@ const lookupUser = defineTool({
 			blockedCount,
 			allowedCount,
 			nearMissCount,
-		});
+		},
+		status,
+		badges,
+	};
+}
 
-		const badges: string[] = [];
-		if (graphqlData?.isGitHubStar) badges.push("GitHub Star");
-		if (graphqlData?.isBountyHunter) badges.push("Bug Bounty Hunter");
-		if (graphqlData?.isDeveloperProgramMember) badges.push("Dev Program");
-		if (graphqlData?.isCampusExpert) badges.push("Campus Expert");
-		if (graphqlData?.isSiteAdmin) badges.push("GitHub Staff");
-
-		const status =
-			blacklist.length > 0
-				? ("blacklisted" as const)
-				: whitelist.length > 0
-					? ("whitelisted" as const)
-					: ("normal" as const);
-
+const lookupUser = defineTool({
+	name: "lookup_user",
+	description:
+		"Look up a GitHub user's profile and their Tripwire activity history for the current repo. Pass the username without @.",
+	inputSchema: z.object({ username: z.string().min(1) }),
+	handler: async ({ username }, ctx) => {
+		const repoId = requireRepoId(ctx);
+		const signals = await gatherUserSignals(username, ctx.userId, repoId);
+		const score = computeContributorScore(signals.scoreInput);
 		return {
-			ghUser,
+			ghUser: signals.ghUser,
 			score,
-			badges,
-			status,
+			badges: signals.badges,
+			status: signals.status,
 			counts: {
-				blockedCount,
-				allowedCount,
-				nearMissCount,
-				publicNonForkRepos,
-				publicForkRepos,
-				prsToThisRepo,
-				mergedPrs,
-				closedPrs,
-				closedUnmergedPrs,
-				accountAgeDays,
+				blockedCount: signals.scoreInput.blockedCount,
+				allowedCount: signals.scoreInput.allowedCount,
+				nearMissCount: signals.scoreInput.nearMissCount,
+				publicNonForkRepos: signals.scoreInput.publicNonForkRepoCount,
+				publicForkRepos: signals.scoreInput.publicForkRepoCount,
+				prsToThisRepo: signals.scoreInput.contextRepoPrCount,
+				mergedPrs: signals.scoreInput.mergedPrCount,
+				closedPrs: signals.scoreInput.closedPrCount,
+				closedUnmergedPrs: signals.scoreInput.closedUnmergedPrCount,
+				accountAgeDays: signals.scoreInput.accountAgeDays,
 			},
 			profile: {
-				profileReadme,
-				graphqlData,
-				achievements,
+				profileReadme: signals.scoreInput.hasProfileReadme,
+				graphqlData: signals.scoreInput.graphql,
+				achievements: signals.scoreInput.achievements,
 			},
 		};
 	},
@@ -368,6 +404,78 @@ const lookupUser = defineTool({
 			status,
 		});
 	},
+});
+
+// ─── score_breakdown ─────────────────────────────────────────────
+
+const CATEGORY_META: Record<
+	ScoreCategory,
+	{ label: string; max: number | null }
+> = {
+	globalReputation: { label: "Global reputation", max: 40 },
+	communitySignals: { label: "Community signals", max: 30 },
+	repoHistory: { label: "Repo history", max: 20 },
+	redFlags: { label: "Red flags", max: 0 },
+	floor: { label: "Floor / clamp", max: null },
+};
+
+const scoreBreakdown = defineTool({
+	name: "score_breakdown",
+	description:
+		"Explain a GitHub user's Tripwire contributor score by showing every contributing factor and its point delta. Use when the user asks why a score is what it is.",
+	directInvokable: true,
+	inputSchema: z.object({ username: z.string().min(1) }),
+	handler: async ({ username }, ctx) => {
+		const repoId = requireRepoId(ctx);
+		const signals = await gatherUserSignals(username, ctx.userId, repoId);
+		const score = computeContributorScore(signals.scoreInput);
+
+		const subtotals: Record<ScoreCategory, number> = {
+			globalReputation: score.globalReputation,
+			communitySignals: score.communitySignals,
+			repoHistory: score.repoHistory,
+			redFlags: score.redFlags,
+			floor: score.lineItems
+				.filter((i) => i.category === "floor")
+				.reduce((sum, i) => sum + i.delta, 0),
+		};
+
+		const order: ScoreCategory[] = [
+			"globalReputation",
+			"communitySignals",
+			"repoHistory",
+			"redFlags",
+			"floor",
+		];
+
+		const categories = order
+			.map((id) => {
+				const items = score.lineItems
+					.filter((i) => i.category === id)
+					.map(({ reason, delta }) => ({ reason, delta }));
+				if (id === "floor" && items.length === 0) return null;
+				return {
+					id,
+					label: CATEGORY_META[id].label,
+					subtotal: subtotals[id],
+					max: CATEGORY_META[id].max,
+					items,
+				};
+			})
+			.filter((c): c is NonNullable<typeof c> => c !== null);
+
+		return {
+			username: signals.ghUser.login,
+			total: score.total,
+			categories,
+		};
+	},
+	chatRender: (output) =>
+		makeSpec("ScoreBreakdown", {
+			username: output.username,
+			total: output.total,
+			categories: output.categories,
+		}),
 });
 
 // ─── reputation_leaderboard ──────────────────────────────────────
@@ -414,5 +522,6 @@ export const readTools: AnyToolDefinition[] = [
 	listEvents,
 	getEvent,
 	lookupUser,
+	scoreBreakdown,
 	getReputationLeaderboard,
 ];

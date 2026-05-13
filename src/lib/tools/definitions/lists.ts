@@ -11,6 +11,7 @@ import {
 import { assertRepoOwner } from "#/integrations/trpc/init";
 import { logEvent } from "#/lib/events";
 import { getInstallationToken } from "#/lib/github/github-api";
+import { resetContributorScore } from "#/lib/reputation";
 import {
 	type AnyToolDefinition,
 	defineTool,
@@ -560,6 +561,43 @@ const moveToBlacklist = defineTool({
 	},
 });
 
+// ─── Score reset ─────────────────────────────────────────────────
+
+const resetContributorScoreTool = defineTool({
+	name: "reset_contributor_score",
+	description:
+		"Forgive a GitHub user's accumulated Tripwire history for this repo. Zeros their reputation totals (blocks/allows/near-misses) and stamps a reset timestamp so future score_breakdown / lookup_user calls ignore older events. The audit events themselves are preserved.",
+	needsApproval: true,
+	inputSchema: z.object({
+		username: z.string().min(1),
+		reason: z.string().optional(),
+	}),
+	handler: async ({ username, reason }, ctx) => {
+		const repoId = requireRepoId(ctx);
+		await assertRepoOwner(ctx.userId, repoId);
+
+		const token = await getTokenForRepo(repoId);
+		const ghUser = await fetchGitHubUser(username, token ?? undefined).catch(() => null);
+
+		const result = await resetContributorScore({
+			repoId,
+			userId: ctx.userId,
+			username: ghUser?.login ?? username,
+			githubUserId: ghUser?.id,
+			reason,
+		});
+
+		return {
+			ok: result.ok,
+			message: result.message,
+			data: {
+				resetAt: result.resetAt.toISOString(),
+				previousTotals: result.previousTotals,
+			},
+		};
+	},
+});
+
 export const listTools: AnyToolDefinition[] = [
 	listLists,
 	getBlacklist,
@@ -571,4 +609,5 @@ export const listTools: AnyToolDefinition[] = [
 	removeFromWhitelist,
 	moveToWhitelist,
 	moveToBlacklist,
+	resetContributorScoreTool,
 ];

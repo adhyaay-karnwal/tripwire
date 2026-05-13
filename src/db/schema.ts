@@ -390,7 +390,9 @@ export type EventAction =
 	| "bot_blacklisted"
 	| "rule_triggered"
 	// Catch-all (renamed from issue_deleted for clarity)
-	| "issue_deleted";
+	| "issue_deleted"
+	// Reputation administration
+	| "score_reset";        // maintainer cleared a user's contributor-score history
 
 export type EventSeverity = "info" | "warning" | "success" | "error";
 export type EventContentType = "pull_request" | "issue" | "comment";
@@ -458,6 +460,13 @@ export const githubReputation = pgTable(
 		firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
 		lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
 		updatedAt: timestamp("updated_at").notNull().defaultNow(),
+		// If set, events older than this timestamp are ignored when re-scoring
+		// the contributor. Lets a maintainer "forgive" past blocks/near-misses
+		// without deleting the audit trail.
+		scoreResetAt: timestamp("score_reset_at"),
+		scoreResetByUserId: text("score_reset_by_user_id").references(() => user.id, {
+			onDelete: "set null",
+		}),
 	},
 	(t) => [
 		index("reputation_score_idx").on(t.score),

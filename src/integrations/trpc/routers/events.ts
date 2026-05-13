@@ -28,6 +28,7 @@ const eventActionEnum = z.enum([
 	"user_blocked",
 	"bot_blacklisted",
 	"rule_triggered",
+	"score_reset",
 ]);
 
 const severityEnum = z.enum(["info", "warning", "success", "error"]);

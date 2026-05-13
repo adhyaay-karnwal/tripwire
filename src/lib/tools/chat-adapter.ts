@@ -9,6 +9,23 @@ import {
 	makeSpec,
 } from "./registry";
 
+/**
+ * Run a tool's handler and apply its chatRender (or the default presenter).
+ * Shared between the chat adapter (for model-driven calls) and any direct
+ * invocation path (e.g. /api/tools/run for UI buttons).
+ *
+ * Throws on handler failure so the caller can decide how to surface it.
+ */
+export async function runToolForChat<TShape extends z.ZodRawShape, TOutput>(
+	tool: ToolDefinition<TShape, TOutput>,
+	args: z.infer<z.ZodObject<TShape>>,
+	ctx: ToolContext,
+): Promise<JsonRenderSpec> {
+	const output = await tool.handler(args, ctx);
+	if (tool.chatRender) return tool.chatRender(output, args);
+	return defaultChatRender(output, tool.name);
+}
+
 const specSchema = z.object({
 	root: z.string(),
 	elements: z.record(
@@ -57,9 +74,7 @@ function buildChatTool<TShape extends z.ZodRawShape, TOutput>(
 		const args = rawArgs as z.infer<z.ZodObject<TShape>>;
 
 		try {
-			const output = await tool.handler(args, ctx);
-			if (tool.chatRender) return tool.chatRender(output, args);
-			return defaultChatRender(output, tool.name);
+			return await runToolForChat(tool, args, ctx);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			return makeSpec("ActionResult", {

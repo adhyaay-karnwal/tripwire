@@ -43,29 +43,58 @@ export interface ScoreInput {
 	nearMissCount: number;
 }
 
+export type ScoreCategory =
+	| "globalReputation"
+	| "communitySignals"
+	| "repoHistory"
+	| "redFlags"
+	| "floor";
+
+export interface ScoreLineItem {
+	category: ScoreCategory;
+	reason: string;
+	delta: number;
+}
+
 export interface ScoreResult {
 	total: number;
 	globalReputation: number;
 	communitySignals: number;
 	repoHistory: number;
 	redFlags: number;
+	lineItems: ScoreLineItem[];
 }
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max);
 }
 
-// ─── Achievement scoring ─────────────────────────────────────
+// ─── Line-item collector ─────────────────────────────────────────
+
+class CategoryBuilder {
+	total = 0;
+	constructor(
+		private readonly category: ScoreCategory,
+		private readonly sink: ScoreLineItem[],
+	) {}
+	add(reason: string, delta: number) {
+		if (delta === 0) return;
+		this.total += delta;
+		this.sink.push({ category: this.category, reason, delta });
+	}
+}
+
+// ─── Achievement scoring ─────────────────────────────────────────
 
 const TIER_POINTS: Record<number, number> = {
-	1: 1,   // default
-	2: 2,   // bronze
-	3: 4,   // silver
-	4: 6,   // gold
+	1: 1,
+	2: 2,
+	3: 4,
+	4: 6,
 };
 
 const RARITY_MULTIPLIER: Record<string, number> = {
-	"starstruck": 2,
+	starstruck: 2,
 	"arctic-code-vault-contributor": 2,
 	"pull-shark": 1.5,
 	"galaxy-brain": 1.5,
@@ -74,186 +103,275 @@ const RARITY_MULTIPLIER: Record<string, number> = {
 	"open-sourcerer": 1,
 	"heart-on-your-sleeve": 1,
 	"mars-2020-contributor": 2,
-	"yolo": 0.5,
-	"quickdraw": 0.5,
+	yolo: 0.5,
+	quickdraw: 0.5,
 };
 
-function scoreAchievements(achievements: GitHubAchievement[]): number {
-	let total = 0;
-	for (const a of achievements) {
-		const tierPts = TIER_POINTS[a.tier] ?? 1;
-		const rarity = RARITY_MULTIPLIER[a.type] ?? 1;
-		total += tierPts * rarity;
-	}
-	return Math.min(total, 20);
+function achievementPoints(a: GitHubAchievement): number {
+	const tierPts = TIER_POINTS[a.tier] ?? 1;
+	const rarity = RARITY_MULTIPLIER[a.type] ?? 1;
+	return tierPts * rarity;
 }
 
-// ─── Global Reputation (0-40) ────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────
 
-function scoreGlobalReputation(input: ScoreInput): number {
-	let s = 0;
+export function formatAccountAge(days: number): string {
+	if (days < 30) return `${days}d`;
+	if (days < 365) return `${Math.floor(days / 30)}mo`;
+	const years = Math.floor(days / 365);
+	const months = Math.floor((days % 365) / 30);
+	return months > 0 ? `${years}y ${months}mo` : `${years}y`;
+}
 
-	// account age: 15+y=15, 10-15y=12, 5-10y=10, 3-5y=8, 1-3y=5, 90d-1y=2, <90d=0
+// ─── Category scorers ────────────────────────────────────────────
+
+function scoreGlobalReputation(input: ScoreInput, sink: ScoreLineItem[]): number {
+	const b = new CategoryBuilder("globalReputation", sink);
 	const days = input.accountAgeDays;
-	s += days >= 5475 ? 15 : days >= 3650 ? 12 : days >= 1825 ? 10 : days >= 1095 ? 8 : days >= 365 ? 5 : days >= 90 ? 2 : 0;
+	const ageLabel = formatAccountAge(days);
+	b.add(
+		`Account age ${ageLabel}`,
+		days >= 5475 ? 15
+			: days >= 3650 ? 12
+			: days >= 1825 ? 10
+			: days >= 1095 ? 8
+			: days >= 365 ? 5
+			: days >= 90 ? 2
+			: 0,
+	);
 
-	// followers: 500+=8, 100-500=6, 20-100=4, 5-20=2, <5=0
 	const f = input.followers;
-	s += f >= 500 ? 8 : f >= 100 ? 6 : f >= 20 ? 4 : f >= 5 ? 2 : 0;
+	b.add(
+		`Followers ${f}`,
+		f >= 500 ? 8 : f >= 100 ? 6 : f >= 20 ? 4 : f >= 5 ? 2 : 0,
+	);
 
-	// merged PRs: 500+=12, 200-500=10, 50-200=8, 10-50=5, 1-10=2, 0=0
 	const prs = input.mergedPrCount;
-	s += prs >= 500 ? 12 : prs >= 200 ? 10 : prs >= 50 ? 8 : prs >= 10 ? 5 : prs >= 1 ? 2 : 0;
+	b.add(
+		`Merged PRs ${prs}`,
+		prs >= 500 ? 12 : prs >= 200 ? 10 : prs >= 50 ? 8 : prs >= 10 ? 5 : prs >= 1 ? 2 : 0,
+	);
 
-	// public non-fork repos (max 4 pts so repo hoarding cannot dominate PR signals)
 	const repos = input.publicNonForkRepoCount;
-	s += repos >= 50 ? 4 : repos >= 20 ? 3 : repos >= 5 ? 2 : repos >= 1 ? 1 : 0;
+	b.add(
+		`Non-fork public repos ${repos}`,
+		repos >= 50 ? 4 : repos >= 20 ? 3 : repos >= 5 ? 2 : repos >= 1 ? 1 : 0,
+	);
 
-	// authored PRs on this Tripwire repo (bounded)
-	if (input.contextRepoPrCount >= 5) s += 2;
-	else if (input.contextRepoPrCount >= 1) s += 1;
+	b.add(
+		`Authored PRs to this repo (${input.contextRepoPrCount})`,
+		input.contextRepoPrCount >= 5 ? 2 : input.contextRepoPrCount >= 1 ? 1 : 0,
+	);
 
-	// following (shows engagement): 50+=2, 10-50=1
-	s += input.following >= 50 ? 2 : input.following >= 10 ? 1 : 0;
+	b.add(
+		`Following ${input.following}`,
+		input.following >= 50 ? 2 : input.following >= 10 ? 1 : 0,
+	);
 
-	// public gists: 5+=2, 1-5=1
-	s += input.publicGists >= 5 ? 2 : input.publicGists >= 1 ? 1 : 0;
+	b.add(
+		`Public gists ${input.publicGists}`,
+		input.publicGists >= 5 ? 2 : input.publicGists >= 1 ? 1 : 0,
+	);
 
-	// merge quality among closed PRs (bounded; needs enough history)
 	const closed = input.closedPrCount;
 	if (closed >= 10) {
 		const mergedRatio = input.mergedPrCount / closed;
-		if (mergedRatio >= 0.7) s += 3;
-		else if (mergedRatio >= 0.55) s += 2;
-		else if (mergedRatio >= 0.4) s += 1;
-		else if (mergedRatio < 0.15) s -= 3;
-		else if (mergedRatio < 0.25) s -= 2;
-		else if (mergedRatio < 0.35) s -= 1;
+		const pct = Math.round(mergedRatio * 100);
+		b.add(
+			`Merged/closed PR ratio ${pct}% (${input.mergedPrCount}/${closed})`,
+			mergedRatio >= 0.7 ? 3
+				: mergedRatio >= 0.55 ? 2
+				: mergedRatio >= 0.4 ? 1
+				: mergedRatio < 0.15 ? -3
+				: mergedRatio < 0.25 ? -2
+				: mergedRatio < 0.35 ? -1
+				: 0,
+		);
 	}
 
-	return clamp(s, 0, 40);
+	const raw = b.total;
+	const clamped = clamp(raw, 0, 40);
+	if (raw > clamped) {
+		sink.push({
+			category: "globalReputation",
+			reason: `Capped at 40 (raw ${raw})`,
+			delta: clamped - raw,
+		});
+	}
+	return clamped;
 }
 
-// ─── Community Signals (0-30) ────────────────────────────────
+function scoreCommunitySignals(input: ScoreInput, sink: ScoreLineItem[]): number {
+	const b = new CategoryBuilder("communitySignals", sink);
 
-function scoreCommunitySignals(input: ScoreInput): number {
-	let s = 0;
+	let achievementTotal = 0;
+	for (const a of input.achievements) {
+		const pts = achievementPoints(a);
+		achievementTotal += pts;
+		b.add(`Achievement: ${a.type} (tier ${a.tier})`, pts);
+	}
+	if (achievementTotal > 20) {
+		b.add("Achievements capped at 20", 20 - achievementTotal);
+	}
 
-	// achievements (variable, capped at 20)
-	s += scoreAchievements(input.achievements);
+	if (input.graphql?.sponsoringCount && input.graphql.sponsoringCount > 0) {
+		b.add(`Sponsoring ${input.graphql.sponsoringCount} user(s)`, 4);
+	}
+	if (input.graphql?.sponsorsCount && input.graphql.sponsorsCount > 0) {
+		b.add(`Has ${input.graphql.sponsorsCount} sponsor(s)`, 5);
+	}
+	if (input.graphql?.hasSponsorsListing) {
+		b.add("Has GitHub Sponsors listing", 2);
+	}
 
-	// sponsoring anyone: +4
-	if (input.graphql?.sponsoringCount && input.graphql.sponsoringCount > 0) s += 4;
-
-	// being sponsored: +5
-	if (input.graphql?.sponsorsCount && input.graphql.sponsorsCount > 0) s += 5;
-
-	// has sponsors listing: +2
-	if (input.graphql?.hasSponsorsListing) s += 2;
-
-	// org memberships: 3+=3, 1-2=2, 0=0
 	const orgCount = input.graphql?.organizations.length ?? 0;
-	s += orgCount >= 3 ? 3 : orgCount >= 1 ? 2 : 0;
+	b.add(`Org memberships ${orgCount}`, orgCount >= 3 ? 3 : orgCount >= 1 ? 2 : 0);
 
-	// github program badges: variable
-	if (input.graphql?.isGitHubStar) s += 4;
-	if (input.graphql?.isBountyHunter) s += 3;
-	if (input.graphql?.isDeveloperProgramMember) s += 2;
-	if (input.graphql?.isCampusExpert) s += 2;
-	if (input.graphql?.isSiteAdmin) s += 5;
+	if (input.graphql?.isGitHubStar) b.add("GitHub Star badge", 4);
+	if (input.graphql?.isBountyHunter) b.add("Bug Bounty Hunter badge", 3);
+	if (input.graphql?.isDeveloperProgramMember) b.add("Developer Program member", 2);
+	if (input.graphql?.isCampusExpert) b.add("Campus Expert", 2);
+	if (input.graphql?.isSiteAdmin) b.add("GitHub Staff", 5);
 
-	// social signals
 	const socials = input.graphql?.socialAccounts.length ?? 0;
-	s += Math.min(socials, 2);
-	if (input.bio) s += 1;
-	if (input.company) s += 1;
-	if (input.blog) s += 1;
-	if (input.twitterUsername) s += 1;
-	if (input.hasTwoFactor) s += 2;
-	if (input.hasProfileReadme) s += 1;
+	if (socials > 0) b.add(`Social accounts ${socials}`, Math.min(socials, 2));
+	if (input.bio) b.add("Has bio", 1);
+	if (input.company) b.add("Has company", 1);
+	if (input.blog) b.add("Has blog", 1);
+	if (input.twitterUsername) b.add("Has Twitter", 1);
+	if (input.hasTwoFactor) b.add("2FA enabled", 2);
+	if (input.hasProfileReadme) b.add("Has profile README", 1);
 
-	return clamp(s, 0, 30);
+	const raw = b.total;
+	const clamped = clamp(raw, 0, 30);
+	if (raw > clamped) {
+		sink.push({
+			category: "communitySignals",
+			reason: `Capped at 30 (raw ${raw})`,
+			delta: clamped - raw,
+		});
+	}
+	return clamped;
 }
 
-// ─── Repo History (0-20) ─────────────────────────────────────
+function scoreRepoHistory(input: ScoreInput, sink: ScoreLineItem[]): number {
+	const total = input.blockedCount + input.allowedCount + input.nearMissCount;
 
-function scoreRepoHistory(input: ScoreInput): number {
-	const totalEvents = input.blockedCount + input.allowedCount + input.nearMissCount;
+	if (total === 0) {
+		sink.push({
+			category: "repoHistory",
+			reason: "No repo history (neutral baseline)",
+			delta: 10,
+		});
+		return 10;
+	}
 
-	// no repo history = neutral baseline (10/20)
-	if (totalEvents === 0) return 10;
+	const b = new CategoryBuilder("repoHistory", sink);
+	b.add("Baseline", 10);
 
-	let s = 10;
+	const allowedPts = Math.min(input.allowedCount * 2, 10);
+	if (allowedPts > 0) {
+		b.add(`${input.allowedCount} allowed events (+2 each, cap 10)`, allowedPts);
+	}
 
-	// allowed events: +2 per (up to +10)
-	s += Math.min(input.allowedCount * 2, 10);
+	if (input.blockedCount > 0) {
+		b.add(`${input.blockedCount} blocked events (-3 each)`, -3 * input.blockedCount);
+	}
 
-	// blocked events: -3 per
-	s -= input.blockedCount * 3;
+	if (input.nearMissCount > 0) {
+		b.add(`${input.nearMissCount} near-miss events (-1 each)`, -input.nearMissCount);
+	}
 
-	// near misses: -1 per
-	s -= input.nearMissCount;
-
-	return clamp(s, 0, 20);
+	const raw = b.total;
+	const clamped = clamp(raw, 0, 20);
+	if (raw !== clamped) {
+		sink.push({
+			category: "repoHistory",
+			reason: `Clamped to [0, 20] (raw ${raw})`,
+			delta: clamped - raw,
+		});
+	}
+	return clamped;
 }
 
-// ─── Red Flags (0 to -10) ────────────────────────────────────
+function scoreRedFlags(input: ScoreInput, sink: ScoreLineItem[]): number {
+	const b = new CategoryBuilder("redFlags", sink);
 
-function scoreRedFlags(input: ScoreInput): number {
-	let penalty = 0;
-
-	// high blocked ratio
 	const total = input.blockedCount + input.allowedCount;
 	if (total > 0) {
 		const blockedRatio = input.blockedCount / total;
-		if (blockedRatio > 0.75) penalty -= 8;
-		else if (blockedRatio > 0.5) penalty -= 5;
-		else if (blockedRatio > 0.25) penalty -= 3;
+		const pct = Math.round(blockedRatio * 100);
+		if (blockedRatio > 0.75) b.add(`Blocked ratio ${pct}%`, -8);
+		else if (blockedRatio > 0.5) b.add(`Blocked ratio ${pct}%`, -5);
+		else if (blockedRatio > 0.25) b.add(`Blocked ratio ${pct}%`, -3);
 	}
 
-	// brand new account + no activity = slight concern
 	if (input.accountAgeDays < 30 && input.mergedPrCount === 0 && input.publicRepos <= 1) {
-		penalty -= 3;
+		b.add("Brand-new account with no activity", -3);
 	}
 
-	// zero followers + zero following (potential throwaway)
 	if (input.followers === 0 && input.following === 0 && input.accountAgeDays < 365) {
-		penalty -= 2;
+		b.add("Zero followers + zero following on new-ish account", -2);
 	}
 
-	// many closed PRs but almost none merged (extra nudge beyond global rep cap)
 	if (input.closedPrCount >= 30) {
 		const mergedRatio = input.mergedPrCount / input.closedPrCount;
-		if (mergedRatio < 0.08) penalty -= 3;
-		else if (mergedRatio < 0.12) penalty -= 2;
+		const pct = Math.round(mergedRatio * 100);
+		if (mergedRatio < 0.08) b.add(`Very low merge ratio ${pct}% across ${input.closedPrCount} PRs`, -3);
+		else if (mergedRatio < 0.12) b.add(`Low merge ratio ${pct}% across ${input.closedPrCount} PRs`, -2);
 	}
 
-	// fork-heavy public profile with almost no non-fork repos (tiny nudge)
 	if (input.publicForkRepoCount >= 50 && input.publicNonForkRepoCount <= 2) {
-		penalty -= 1;
+		b.add(`Fork-heavy profile (${input.publicForkRepoCount} forks, ${input.publicNonForkRepoCount} non-fork)`, -1);
 	}
 
-	return clamp(penalty, -10, 0);
+	const raw = b.total;
+	const clamped = clamp(raw, -10, 0);
+	if (raw !== clamped) {
+		sink.push({
+			category: "redFlags",
+			reason: `Clamped to [-10, 0] (raw ${raw})`,
+			delta: clamped - raw,
+		});
+	}
+	return clamped;
 }
 
-// ─── Main ────────────────────────────────────────────────────
+// ─── Main ────────────────────────────────────────────────────────
 
 export function computeContributorScore(input: ScoreInput): ScoreResult {
-	const globalReputation = scoreGlobalReputation(input);
-	const communitySignals = scoreCommunitySignals(input);
-	const repoHistory = scoreRepoHistory(input);
-	const redFlags = scoreRedFlags(input);
+	const lineItems: ScoreLineItem[] = [];
 
-	// longevity floor: very old accounts with any activity are unlikely to be malicious
-	// ensures 10+ year accounts never score below 45 regardless of other signals
+	const globalReputation = scoreGlobalReputation(input, lineItems);
+	const communitySignals = scoreCommunitySignals(input, lineItems);
+	const repoHistory = scoreRepoHistory(input, lineItems);
+	const redFlags = scoreRedFlags(input, lineItems);
+
 	let raw = globalReputation + communitySignals + repoHistory + redFlags;
-	if (input.accountAgeDays >= 3650 && input.publicRepos >= 1) {
-		raw = Math.max(raw, 45);
-	} else if (input.accountAgeDays >= 1825 && input.publicRepos >= 3) {
-		raw = Math.max(raw, 35);
+	if (input.accountAgeDays >= 3650 && input.publicRepos >= 1 && raw < 45) {
+		lineItems.push({
+			category: "floor",
+			reason: "Longevity floor: 10+ years with activity",
+			delta: 45 - raw,
+		});
+		raw = 45;
+	} else if (input.accountAgeDays >= 1825 && input.publicRepos >= 3 && raw < 35) {
+		lineItems.push({
+			category: "floor",
+			reason: "Longevity floor: 5+ years with 3+ repos",
+			delta: 35 - raw,
+		});
+		raw = 35;
 	}
 
 	const total = clamp(raw, 0, 100);
+	if (raw !== total) {
+		lineItems.push({
+			category: "floor",
+			reason: `Final clamp to [0, 100] (raw ${raw})`,
+			delta: total - raw,
+		});
+	}
 
 	return {
 		total,
@@ -261,5 +379,6 @@ export function computeContributorScore(input: ScoreInput): ScoreResult {
 		communitySignals,
 		repoHistory,
 		redFlags,
+		lineItems,
 	};
 }

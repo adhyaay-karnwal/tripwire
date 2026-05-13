@@ -1,4 +1,6 @@
-import { defineRegistry } from "@json-render/react";
+import { defineRegistry, Renderer, JSONUIProvider } from "@json-render/react";
+import { useState } from "react";
+import type { RenderSpec } from "#/types/chat";
 import { catalog } from "./ui-catalog";
 
 /**
@@ -136,6 +138,9 @@ export const { registry } = defineRegistry(catalog, {
 						{props.hasTwoFactor && <span className="text-tw-success">2FA</span>}
 						{props.hasProfileReadme && <span>README</span>}
 					</div>
+
+					{/* Score breakdown affordance */}
+					<ScoreBreakdownButton username={props.username} />
 				</div>
 			);
 		},
@@ -336,6 +341,64 @@ export const { registry } = defineRegistry(catalog, {
 			);
 		},
 
+		// ─── Score Breakdown ──────────────────────────────────────────
+		ScoreBreakdown: ({ props }) => {
+			return (
+				<div className="rounded-xl bg-tw-card p-3 flex flex-col gap-3">
+					<div className="flex items-baseline justify-between">
+						<div className="flex items-center gap-1.5 text-[12px] text-tw-text-muted tracking-wider">
+							@{props.username}
+						</div>
+						<div className="text-[20px] font-semibold text-tw-text-primary">
+							{props.total}
+							<span className="text-[12px] text-tw-text-muted ml-1">/ 100</span>
+						</div>
+					</div>
+
+					<div className="flex flex-col gap-2.5">
+						{props.categories.map((cat) => (
+							<div key={cat.id} className="flex flex-col gap-1">
+								<div className="flex items-baseline justify-between text-[12px]">
+									<span className="text-tw-text-secondary font-medium">{cat.label}</span>
+									<span className={cat.subtotal < 0 ? "text-tw-error" : "text-tw-text-primary"}>
+										{cat.subtotal > 0 ? "+" : ""}
+										{cat.subtotal}
+										{cat.max != null && (
+											<span className="text-tw-text-muted ml-1">/ {cat.max}</span>
+										)}
+									</span>
+								</div>
+								{cat.items.length === 0 ? (
+									<div className="text-[11px] text-tw-text-muted pl-2">No contributing factors.</div>
+								) : (
+									<div className="flex flex-col gap-0.5 pl-2">
+										{cat.items.map((item, i) => (
+											<div
+												key={`${cat.id}-${i}`}
+												className="flex items-baseline justify-between text-[11px] gap-2"
+											>
+												<span className="text-tw-text-secondary">{item.reason}</span>
+												<span
+													className={
+														item.delta < 0
+															? "text-tw-error tabular-nums"
+															: "text-tw-success tabular-nums"
+													}
+												>
+													{item.delta > 0 ? "+" : ""}
+													{item.delta}
+												</span>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
+						))}
+					</div>
+				</div>
+			);
+		},
+
 		// ─── Reputation Leaderboard ───────────────────────────────────
 		ReputationLeaderboard: ({ props }) => {
 			if (props.users.length === 0) {
@@ -506,3 +569,75 @@ export const { registry } = defineRegistry(catalog, {
 		},
 	},
 });
+
+// ─── UserCard score breakdown affordance ─────────────────────────
+// Fetches the score_breakdown spec via /api/tools/run (bypasses the LLM
+// — no token cost) and renders it inline beneath the card.
+
+type BreakdownState =
+	| { phase: "idle" }
+	| { phase: "loading" }
+	| { phase: "ready"; spec: RenderSpec }
+	| { phase: "error"; message: string };
+
+function ScoreBreakdownButton({ username }: { username: string }) {
+	const [state, setState] = useState<BreakdownState>({ phase: "idle" });
+
+	async function load() {
+		setState({ phase: "loading" });
+		try {
+			const res = await fetch("/api/tools/run", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "score_breakdown", args: { username } }),
+			});
+			const body = (await res.json()) as
+				| { ok: true; spec: RenderSpec }
+				| { ok: false; error: string };
+			if (!res.ok || !body.ok) {
+				const message = !body.ok ? body.error : `HTTP ${res.status}`;
+				setState({ phase: "error", message });
+				return;
+			}
+			setState({ phase: "ready", spec: body.spec });
+		} catch (e) {
+			setState({
+				phase: "error",
+				message: e instanceof Error ? e.message : String(e),
+			});
+		}
+	}
+
+	if (state.phase === "ready") {
+		return (
+			<div className="flex flex-col gap-2 pt-1 border-t border-tw-border">
+				<JSONUIProvider registry={registry}>
+					<Renderer spec={state.spec} registry={registry} />
+				</JSONUIProvider>
+				<button
+					type="button"
+					onClick={() => setState({ phase: "idle" })}
+					className="self-start text-[10px] text-tw-text-muted hover:text-tw-text-secondary transition-colors"
+				>
+					Hide breakdown
+				</button>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex items-center gap-2 pt-0.5">
+			<button
+				type="button"
+				onClick={load}
+				disabled={state.phase === "loading"}
+				className="text-[11px] px-2 py-1 rounded-md bg-[#FAFAFA08] hover:bg-[#FAFAFA12] text-tw-text-secondary hover:text-tw-text-primary transition-colors disabled:opacity-50"
+			>
+				{state.phase === "loading" ? "Loading…" : "Score breakdown"}
+			</button>
+			{state.phase === "error" && (
+				<span className="text-[11px] text-tw-error">{state.message}</span>
+			)}
+		</div>
+	);
+}
