@@ -348,6 +348,28 @@ export function computeContributorScore(input: ScoreInput): ScoreResult {
 	const redFlags = scoreRedFlags(input, lineItems);
 
 	let raw = globalReputation + communitySignals + repoHistory + redFlags;
+
+	const capLosses: number[] = [];
+	for (const item of lineItems) {
+		if (
+			item.delta < 0 &&
+			(item.category === "globalReputation" || item.category === "communitySignals") &&
+			(item.reason.startsWith("Capped at") || item.reason === "Achievements capped at 20")
+		) {
+			capLosses.push(-item.delta);
+		}
+	}
+	if (capLosses.length > 0) {
+		const totalLost = capLosses.reduce((sum, n) => sum + n, 0);
+		const bonus = totalLost / capLosses.length;
+		lineItems.push({
+			category: "floor",
+			reason: `Overflow bonus: avg of ${capLosses.length} cap losses (${totalLost} pts above caps)`,
+			delta: bonus,
+		});
+		raw += bonus;
+	}
+
 	if (input.accountAgeDays >= 3650 && input.publicRepos >= 1 && raw < 45) {
 		lineItems.push({
 			category: "floor",
