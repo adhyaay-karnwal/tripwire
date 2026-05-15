@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { authedProcedure } from "../init";
 import { assertRepoOwner, computeContributorScore } from "@tripwire/core";
 import { resetContributorScore } from "@tripwire/core";
-import { fetchUserContributions } from "@tripwire/github";
+import { fetchUserContributions, fetchUserGraphQL, fetchUserAchievements } from "@tripwire/github";
 import { db } from "@tripwire/db/client";
 import {
 	repositories,
@@ -224,6 +224,18 @@ export const reputationRouter = {
 		.query(async ({ input }) => {
 			const token = await getTokenForRepo(input.repoId);
 			if (!token) return null;
-			return fetchUserContributions(token, input.username);
+
+			const [contribs, graphql, achievements] = await Promise.all([
+				fetchUserContributions(token, input.username).catch(() => null),
+				fetchUserGraphQL(token, input.username).catch(() => null),
+				fetchUserAchievements(input.username).catch(() => []),
+			]);
+
+			return {
+				contributions: contribs?.contributions ?? null,
+				pinned: contribs?.pinned ?? [],
+				graphql,
+				achievements,
+			};
 		}),
 } satisfies TRPCRouterRecord;

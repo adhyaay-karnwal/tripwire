@@ -1,5 +1,3 @@
-import { buildWorkspacePath } from "./workspace-context";
-
 /** Build org-scoped workspace paths */
 export function workspaceRoutes(orgSlug: string) {
     return {
@@ -10,7 +8,6 @@ export function workspaceRoutes(orgSlug: string) {
         insights: `/${orgSlug}/insights`,
         automations: `/${orgSlug}/automations`,
         integrations: `/${orgSlug}/integrations`,
-        user: (username: string) => `/${orgSlug}/users/${username}`,
     } as const;
 }
 
@@ -18,6 +15,7 @@ export function workspaceRoutes(orgSlug: string) {
 export const routes = {
     landing: "/",
     login: "/login",
+    user: (username: string) => `/users/${username}`,
     vouched: "/vouched",
     request: (owner: string, repo: string) => `/request/${owner}/${repo}`,
     settings: {

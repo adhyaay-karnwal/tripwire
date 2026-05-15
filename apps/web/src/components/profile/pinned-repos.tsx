@@ -6,7 +6,7 @@ export function PinnedRepoCard({ repo }: { repo: PinnedRepo }) {
 			href={repo.url}
 			target="_blank"
 			rel="noreferrer"
-			className="flex flex-col justify-between gap-1 rounded-lg bg-tw-inner px-3.5 py-2.5 transition-colors hover:bg-tw-hover"
+			className="flex flex-col justify-between gap-1 rounded-lg bg-tw-inner px-3.5 py-2.5 transition-opacity hover:opacity-80"
 		>
 			<div>
 				<div className="text-[13px] font-medium text-tw-text-primary truncate">

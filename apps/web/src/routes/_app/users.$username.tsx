@@ -7,9 +7,10 @@ import { useGitHubUserFormatted } from "#/hooks/use-github-user";
 import { ContributionsHeatmap } from "#/components/profile/contributions-heatmap";
 import { PinnedRepos } from "#/components/profile/pinned-repos";
 import { GithubIcon } from "#/components/icons/github";
+import { CommunitySignals } from "#/components/profile/community-signals";
 import { Button } from "#/components/ui/button";
 
-export const Route = createFileRoute("/_app/$orgHandle/users/$username")({
+export const Route = createFileRoute("/_app/users/$username")({
 	component: UserProfilePage,
 });
 
@@ -53,7 +54,8 @@ function UserProfilePage() {
 		enabled: !!repo?.id && canSeeActivity,
 	});
 
-	const score = scoreQuery.data;
+	const scoreData = scoreQuery.data;
+	const score = scoreData?.score ?? null;
 	const profile = profileQuery.data;
 	const events = eventsQuery.data?.events ?? [];
 
@@ -125,34 +127,6 @@ function UserProfilePage() {
 				</p>
 			)}
 
-			{/* Contributions heatmap */}
-			{profile?.contributions && (
-				<section className="rounded-xl bg-tw-card p-1 flex flex-col gap-[3px]">
-					<div className="px-2 pt-1.5 pb-0.5">
-						<span className="text-[11px] uppercase tracking-[0.08em] text-tw-text-tertiary font-medium">
-							Contributions
-						</span>
-					</div>
-					<div className="rounded-[10px] bg-tw-inner p-3 overflow-hidden">
-						<ContributionsHeatmap data={profile.contributions} />
-					</div>
-				</section>
-			)}
-
-			{/* Pinned repos */}
-			{profile?.pinned && profile.pinned.length > 0 && (
-				<section className="rounded-xl bg-tw-card p-1 flex flex-col gap-[3px]">
-					<div className="px-2 pt-1.5 pb-0.5">
-						<span className="text-[11px] uppercase tracking-[0.08em] text-tw-text-tertiary font-medium">
-							Pinned repositories
-						</span>
-					</div>
-					<div className="p-1">
-						<PinnedRepos repos={profile.pinned} />
-					</div>
-				</section>
-			)}
-
 			{/* Score breakdown */}
 			{score && scoreTotal !== null && (
 				<section className="rounded-xl bg-tw-card p-1 flex flex-col gap-[3px]">
@@ -183,20 +157,20 @@ function UserProfilePage() {
 							))}
 						</div>
 						<div className="flex items-center gap-4 text-[11px] text-tw-text-tertiary">
-							<span className="flex items-center gap-1.5">
+							<span className="flex items-center gap-1.5" title="Account age, followers, merged PRs, public repos">
 								<span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#34A6FF" }} />
 								Global {score.globalReputation}/40
 							</span>
-							<span className="flex items-center gap-1.5">
+							<span className="flex items-center gap-1.5" title="Achievements, sponsors, orgs, social accounts, profile completeness">
 								<span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#9F7AEA" }} />
 								Community {score.communitySignals}/30
 							</span>
-							<span className="flex items-center gap-1.5">
+							<span className="flex items-center gap-1.5" title="Tripwire event history — allowed, blocked, near-miss">
 								<span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#67E19F" }} />
 								Repo {score.repoHistory}/20
 							</span>
 							{score.redFlags < 0 && (
-								<span className="flex items-center gap-1.5">
+								<span className="flex items-center gap-1.5" title="Suspicious patterns — high block ratio, new account with no activity">
 									<span className="w-2 h-2 rounded-full bg-tw-error" />
 									Flags {score.redFlags}
 								</span>
@@ -204,6 +178,43 @@ function UserProfilePage() {
 						</div>
 					</div>
 				</section>
+			)}
+
+			{/* Contributions heatmap */}
+			{profile?.contributions && (
+				<section className="rounded-xl bg-tw-card p-1 flex flex-col gap-[3px]">
+					<div className="px-2 pt-1.5 pb-0.5">
+						<span className="text-[11px] uppercase tracking-[0.08em] text-tw-text-tertiary font-medium">
+							Contributions
+						</span>
+					</div>
+					<div className="rounded-[10px] bg-tw-inner p-3 overflow-hidden">
+						<ContributionsHeatmap data={profile.contributions} />
+					</div>
+				</section>
+			)}
+
+			{/* Pinned repos */}
+			{profile?.pinned && profile.pinned.length > 0 && (
+				<section className="rounded-xl bg-tw-card p-1 flex flex-col gap-[3px]">
+					<div className="px-2 pt-1.5 pb-0.5">
+						<span className="text-[11px] uppercase tracking-[0.08em] text-tw-text-tertiary font-medium">
+							Pinned repositories
+						</span>
+					</div>
+					<div className="p-1">
+						<PinnedRepos repos={profile.pinned} />
+					</div>
+				</section>
+			)}
+
+			{/* Community signals */}
+			{profile && (
+				<CommunitySignals
+					graphql={profile.graphql}
+					achievements={profile.achievements}
+					username={username}
+				/>
 			)}
 
 			{/* Stats grid */}

@@ -36,6 +36,7 @@ import { Route as ApiGithubWebhookRouteImport } from './routes/api.github.webhoo
 import { Route as ApiGithubInstallRouteImport } from './routes/api.github.install'
 import { Route as ApiGithubCallbackRouteImport } from './routes/api.github.callback'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AppUsersUsernameRouteImport } from './routes/_app/users.$username'
 import { Route as AppSettingsGeneralRouteImport } from './routes/_app/settings/general'
 import { Route as AppSettingsDevelopersRouteImport } from './routes/_app/settings/developers'
 import { Route as AppSettingsBillingRouteImport } from './routes/_app/settings/billing'
@@ -50,7 +51,6 @@ import { Route as AppOrgHandleAutomationsRouteImport } from './routes/_app/$orgH
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceSplatRouteImport } from './routes/[.well-known].oauth-protected-resource.$'
 import { Route as Char91DotwellKnownChar93OauthAuthorizationServerSplatRouteImport } from './routes/[.well-known].oauth-authorization-server.$'
 import { Route as AppOrgHandleEventsIndexRouteImport } from './routes/_app/$orgHandle.events.index'
-import { Route as AppOrgHandleUsersUsernameRouteImport } from './routes/_app/$orgHandle.users.$username'
 import { Route as AppOrgHandleEventsEventIdRouteImport } from './routes/_app/$orgHandle.events.$eventId'
 
 const VouchedRoute = VouchedRouteImport.update({
@@ -189,6 +189,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppUsersUsernameRoute = AppUsersUsernameRouteImport.update({
+  id: '/users/$username',
+  path: '/users/$username',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsGeneralRoute = AppSettingsGeneralRouteImport.update({
   id: '/general',
   path: '/general',
@@ -262,12 +267,6 @@ const AppOrgHandleEventsIndexRoute = AppOrgHandleEventsIndexRouteImport.update({
   path: '/events/',
   getParentRoute: () => AppOrgHandleRoute,
 } as any)
-const AppOrgHandleUsersUsernameRoute =
-  AppOrgHandleUsersUsernameRouteImport.update({
-    id: '/users/$username',
-    path: '/users/$username',
-    getParentRoute: () => AppOrgHandleRoute,
-  } as any)
 const AppOrgHandleEventsEventIdRoute =
   AppOrgHandleEventsEventIdRouteImport.update({
     id: '/events/$eventId',
@@ -305,6 +304,7 @@ export interface FileRoutesByFullPath {
   '/settings/billing': typeof AppSettingsBillingRoute
   '/settings/developers': typeof AppSettingsDevelopersRoute
   '/settings/general': typeof AppSettingsGeneralRoute
+  '/users/$username': typeof AppUsersUsernameRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
@@ -316,7 +316,6 @@ export interface FileRoutesByFullPath {
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/events/': typeof AppEventsIndexRoute
   '/$orgHandle/events/$eventId': typeof AppOrgHandleEventsEventIdRoute
-  '/$orgHandle/users/$username': typeof AppOrgHandleUsersUsernameRoute
   '/$orgHandle/events/': typeof AppOrgHandleEventsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -349,6 +348,7 @@ export interface FileRoutesByTo {
   '/settings/billing': typeof AppSettingsBillingRoute
   '/settings/developers': typeof AppSettingsDevelopersRoute
   '/settings/general': typeof AppSettingsGeneralRoute
+  '/users/$username': typeof AppUsersUsernameRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
@@ -360,7 +360,6 @@ export interface FileRoutesByTo {
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/events': typeof AppEventsIndexRoute
   '/$orgHandle/events/$eventId': typeof AppOrgHandleEventsEventIdRoute
-  '/$orgHandle/users/$username': typeof AppOrgHandleUsersUsernameRoute
   '/$orgHandle/events': typeof AppOrgHandleEventsIndexRoute
 }
 export interface FileRoutesById {
@@ -395,6 +394,7 @@ export interface FileRoutesById {
   '/_app/settings/billing': typeof AppSettingsBillingRoute
   '/_app/settings/developers': typeof AppSettingsDevelopersRoute
   '/_app/settings/general': typeof AppSettingsGeneralRoute
+  '/_app/users/$username': typeof AppUsersUsernameRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
@@ -406,7 +406,6 @@ export interface FileRoutesById {
   '/request/$owner/$repo': typeof RequestOwnerRepoRoute
   '/_app/events/': typeof AppEventsIndexRoute
   '/_app/$orgHandle/events/$eventId': typeof AppOrgHandleEventsEventIdRoute
-  '/_app/$orgHandle/users/$username': typeof AppOrgHandleUsersUsernameRoute
   '/_app/$orgHandle/events/': typeof AppOrgHandleEventsIndexRoute
 }
 export interface FileRouteTypes {
@@ -441,6 +440,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/developers'
     | '/settings/general'
+    | '/users/$username'
     | '/api/auth/$'
     | '/api/github/callback'
     | '/api/github/install'
@@ -452,7 +452,6 @@ export interface FileRouteTypes {
     | '/request/$owner/$repo'
     | '/events/'
     | '/$orgHandle/events/$eventId'
-    | '/$orgHandle/users/$username'
     | '/$orgHandle/events/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -485,6 +484,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/developers'
     | '/settings/general'
+    | '/users/$username'
     | '/api/auth/$'
     | '/api/github/callback'
     | '/api/github/install'
@@ -496,7 +496,6 @@ export interface FileRouteTypes {
     | '/request/$owner/$repo'
     | '/events'
     | '/$orgHandle/events/$eventId'
-    | '/$orgHandle/users/$username'
     | '/$orgHandle/events'
   id:
     | '__root__'
@@ -530,6 +529,7 @@ export interface FileRouteTypes {
     | '/_app/settings/billing'
     | '/_app/settings/developers'
     | '/_app/settings/general'
+    | '/_app/users/$username'
     | '/api/auth/$'
     | '/api/github/callback'
     | '/api/github/install'
@@ -541,7 +541,6 @@ export interface FileRouteTypes {
     | '/request/$owner/$repo'
     | '/_app/events/'
     | '/_app/$orgHandle/events/$eventId'
-    | '/_app/$orgHandle/users/$username'
     | '/_app/$orgHandle/events/'
   fileRoutesById: FileRoutesById
 }
@@ -757,6 +756,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/users/$username': {
+      id: '/_app/users/$username'
+      path: '/users/$username'
+      fullPath: '/users/$username'
+      preLoaderRoute: typeof AppUsersUsernameRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings/general': {
       id: '/_app/settings/general'
       path: '/general'
@@ -855,13 +861,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgHandleEventsIndexRouteImport
       parentRoute: typeof AppOrgHandleRoute
     }
-    '/_app/$orgHandle/users/$username': {
-      id: '/_app/$orgHandle/users/$username'
-      path: '/users/$username'
-      fullPath: '/$orgHandle/users/$username'
-      preLoaderRoute: typeof AppOrgHandleUsersUsernameRouteImport
-      parentRoute: typeof AppOrgHandleRoute
-    }
     '/_app/$orgHandle/events/$eventId': {
       id: '/_app/$orgHandle/events/$eventId'
       path: '/events/$eventId'
@@ -879,7 +878,6 @@ interface AppOrgHandleRouteChildren {
   AppOrgHandleIntegrationsRoute: typeof AppOrgHandleIntegrationsRoute
   AppOrgHandleRulesRoute: typeof AppOrgHandleRulesRoute
   AppOrgHandleEventsEventIdRoute: typeof AppOrgHandleEventsEventIdRoute
-  AppOrgHandleUsersUsernameRoute: typeof AppOrgHandleUsersUsernameRoute
   AppOrgHandleEventsIndexRoute: typeof AppOrgHandleEventsIndexRoute
 }
 
@@ -890,7 +888,6 @@ const AppOrgHandleRouteChildren: AppOrgHandleRouteChildren = {
   AppOrgHandleIntegrationsRoute: AppOrgHandleIntegrationsRoute,
   AppOrgHandleRulesRoute: AppOrgHandleRulesRoute,
   AppOrgHandleEventsEventIdRoute: AppOrgHandleEventsEventIdRoute,
-  AppOrgHandleUsersUsernameRoute: AppOrgHandleUsersUsernameRoute,
   AppOrgHandleEventsIndexRoute: AppOrgHandleEventsIndexRoute,
 }
 
@@ -927,6 +924,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
   AppChatChatIdRoute: typeof AppChatChatIdRoute
   AppEventsEventIdRoute: typeof AppEventsEventIdRoute
+  AppUsersUsernameRoute: typeof AppUsersUsernameRoute
   AppEventsIndexRoute: typeof AppEventsIndexRoute
 }
 
@@ -941,6 +939,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRouteWithChildren,
   AppChatChatIdRoute: AppChatChatIdRoute,
   AppEventsEventIdRoute: AppEventsEventIdRoute,
+  AppUsersUsernameRoute: AppUsersUsernameRoute,
   AppEventsIndexRoute: AppEventsIndexRoute,
 }
 

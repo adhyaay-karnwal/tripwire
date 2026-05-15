@@ -19,7 +19,7 @@ function EventDetailPage() {
 	const { repo } = useWorkspace();
 	const homePath = useWorkspacePath("home");
 	const eventsPath = useWorkspacePath("events");
-	const usersBasePath = useWorkspacePath("users");
+	const usersBasePath = "/users";
 	const [actionStatus, setActionStatus] = useState<"idle" | "blacklisted" | "safe" | "closed">("idle");
 
 	// Fetch the event

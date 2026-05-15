@@ -9,7 +9,7 @@ const COLOR_BANDS = [
 	{ min: 31, max: 50, color: "#34a65a" },
 	{ min: 51, max: Infinity, color: "#67E19F" },
 ];
-const EMPTY_COLOR = "var(--color-tw-inner)";
+const EMPTY_COLOR = "#363638";
 const LEGEND_COLORS = COLOR_BANDS.map((b) => b.color);
 
 const MONTH_FMT = new Intl.DateTimeFormat(undefined, { month: "short" });
