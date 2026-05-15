@@ -11,7 +11,7 @@ function LandingPage() {
 	const { data: session } = authClient.useSession();
 
 	return (
-		<div className="[font-synthesis:none] flex w-full min-h-screen flex-col bg-black antialiased relative overflow-hidden">
+		<div className="[font-synthesis:none] flex w-full min-h-screen flex-col items-center justify-center bg-black antialiased relative overflow-hidden">
 			{/* Terminal background */}
 			<div className="absolute inset-0 z-0">
 				<FaultyTerminal
@@ -32,7 +32,7 @@ function LandingPage() {
 			</div>
 
 			{/* Content */}
-			<div className="relative z-10 flex w-full min-h-screen flex-col">
+			<div className="relative z-10 flex w-full md:max-w-[70vw] w-full min-h-screen flex-col">
 				<LandingHeader session={session} />
 				<div className="flex w-full flex-1 gap-3 justify-center items-center flex-col px-4">
 					<h1 className="text-tw-text-primary font-sans font-medium text-lg">
