@@ -1,4 +1,4 @@
-import { Renderer, Program, Mesh, Color, Triangle } from "ogl";
+import { Renderer, Program, Mesh, Color, Triangle, Texture } from "ogl";
 import { useEffect, useRef, useMemo, useCallback } from "react";
 
 const vertexShader = `
@@ -33,6 +33,9 @@ uniform vec3  uTint;
 uniform vec2  uMouse;
 uniform float uMouseStrength;
 uniform float uUseMouse;
+uniform sampler2D uMaskTex;
+uniform vec2  uMaskHalfSize;
+uniform float uUseMask;
 uniform float uPageLoadProgress;
 uniform float uUsePageLoadAnimation;
 uniform float uBrightness;
@@ -99,12 +102,22 @@ float digit(vec2 p){
 
     if(uUseMouse > 0.5){
         vec2 mouseWorld = uMouse * uScale;
-        float distToMouse = distance(s, mouseWorld);
-        float mouseInfluence = exp(-distToMouse * 8.0) * uMouseStrength * 10.0;
-        intensity += mouseInfluence;
 
-        float ripple = sin(distToMouse * 20.0 - iTime * 5.0) * 0.1 * mouseInfluence;
-        intensity += ripple;
+        if(uUseMask > 0.5){
+            vec2 d = s - mouseWorld;
+            vec2 muv = d / (uMaskHalfSize * 2.0) + 0.5;
+            if(muv.x >= 0.0 && muv.x <= 1.0 && muv.y >= 0.0 && muv.y <= 1.0){
+                float maskVal = texture2D(uMaskTex, muv).r;
+                intensity += maskVal * uMouseStrength * 10.0;
+            }
+        } else {
+            float distToMouse = distance(s, mouseWorld);
+            float mouseInfluence = exp(-distToMouse * 8.0) * uMouseStrength * 10.0;
+            intensity += mouseInfluence;
+
+            float ripple = sin(distToMouse * 20.0 - iTime * 5.0) * 0.1 * mouseInfluence;
+            intensity += ripple;
+        }
     }
 
     if(uUsePageLoadAnimation > 0.5){
@@ -214,6 +227,19 @@ function hexToRgb(hex: string): [number, number, number] {
 	return [((num >> 16) & 255) / 255, ((num >> 8) & 255) / 255, (num & 255) / 255];
 }
 
+interface CursorMaskLayer {
+	path: string;
+	viewBox: readonly [number, number];
+	rect: readonly [number, number, number, number];
+	mode: "add" | "subtract";
+}
+
+interface CursorMask {
+	viewBox: readonly [number, number];
+	width?: number;
+	layers: readonly CursorMaskLayer[];
+}
+
 interface FaultyTerminalProps {
 	scale?: number;
 	gridMul?: [number, number];
@@ -230,6 +256,7 @@ interface FaultyTerminalProps {
 	tint?: string;
 	mouseReact?: boolean;
 	mouseStrength?: number;
+	cursorMask?: CursorMask;
 	pageLoadAnimation?: boolean;
 	brightness?: number;
 	className?: string;
@@ -252,6 +279,7 @@ export default function FaultyTerminal({
 	tint = "#ffffff",
 	mouseReact = true,
 	mouseStrength = 0.2,
+	cursorMask,
 	pageLoadAnimation = true,
 	brightness = 1,
 	className = "",
@@ -271,14 +299,24 @@ export default function FaultyTerminal({
 	const ditherValue = useMemo(() => (typeof dither === "boolean" ? (dither ? 1 : 0) : dither), [dither]);
 	const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
 
+	const maskKey = useMemo(() => (cursorMask ? JSON.stringify(cursorMask) : ""), [cursorMask]);
+	const maskHalfSize = useMemo(() => {
+		if (!cursorMask) return new Float32Array([0, 0]);
+		const [vbW, vbH] = cursorMask.viewBox;
+		const w = cursorMask.width ?? 1.4;
+		const h = (w * vbH) / vbW;
+		return new Float32Array([w / 2, h / 2]);
+		// biome-ignore lint/correctness/useExhaustiveDependencies: maskKey is the content hash for cursorMask
+	}, [maskKey]);
+
 	const handleMouseMove = useCallback((e: MouseEvent) => {
 		const ctn = containerRef.current;
 		if (!ctn) return;
 		const rect = ctn.getBoundingClientRect();
-		mouseRef.current = {
-			x: (e.clientX - rect.left) / rect.width,
-			y: 1 - (e.clientY - rect.top) / rect.height,
-		};
+		const x = (e.clientX - rect.left) / rect.width;
+		const y = 1 - (e.clientY - rect.top) / rect.height;
+		if (x < 0 || x > 1 || y < 0 || y > 1) return;
+		mouseRef.current = { x, y };
 	}, []);
 
 	useEffect(() => {
@@ -289,6 +327,39 @@ export default function FaultyTerminal({
 		rendererRef.current = renderer;
 		const gl = renderer.gl;
 		gl.clearColor(0, 0, 0, 1);
+
+		const maskCanvas = document.createElement("canvas");
+		if (cursorMask) {
+			const [vbW, vbH] = cursorMask.viewBox;
+			const pixelW = 512;
+			const pixelH = Math.max(1, Math.round((pixelW * vbH) / vbW));
+			maskCanvas.width = pixelW;
+			maskCanvas.height = pixelH;
+			const ctx = maskCanvas.getContext("2d");
+			if (ctx) {
+				const sx = pixelW / vbW;
+				const sy = pixelH / vbH;
+				for (const layer of cursorMask.layers) {
+					ctx.save();
+					ctx.fillStyle = layer.mode === "add" ? "white" : "black";
+					const [rx, ry, rw, rh] = layer.rect;
+					const [pw, ph] = layer.viewBox;
+					ctx.translate(rx * sx, ry * sy);
+					ctx.scale((rw / pw) * sx, (rh / ph) * sy);
+					ctx.fill(new Path2D(layer.path));
+					ctx.restore();
+				}
+			}
+		} else {
+			maskCanvas.width = 1;
+			maskCanvas.height = 1;
+		}
+		const maskTexture = new Texture(gl, {
+			image: maskCanvas,
+			width: maskCanvas.width,
+			height: maskCanvas.height,
+			generateMipmaps: false,
+		});
 
 		const geometry = new Triangle(gl);
 		const program = new Program(gl, {
@@ -311,6 +382,9 @@ export default function FaultyTerminal({
 				uMouse: { value: new Float32Array([0.5, 0.5]) },
 				uMouseStrength: { value: mouseStrength },
 				uUseMouse: { value: mouseReact ? 1 : 0 },
+				uMaskTex: { value: maskTexture },
+				uMaskHalfSize: { value: maskHalfSize },
+				uUseMask: { value: cursorMask ? 1 : 0 },
 				uPageLoadProgress: { value: pageLoadAnimation ? 0 : 1 },
 				uUsePageLoadAnimation: { value: pageLoadAnimation ? 1 : 0 },
 				uBrightness: { value: brightness },
@@ -365,18 +439,18 @@ export default function FaultyTerminal({
 		rafRef.current = requestAnimationFrame(update);
 		ctn.appendChild(gl.canvas);
 
-		if (mouseReact) ctn.addEventListener("mousemove", handleMouseMove);
+		if (mouseReact) window.addEventListener("mousemove", handleMouseMove);
 
 		return () => {
 			cancelAnimationFrame(rafRef.current);
 			resizeObserver.disconnect();
-			if (mouseReact) ctn.removeEventListener("mousemove", handleMouseMove);
+			if (mouseReact) window.removeEventListener("mousemove", handleMouseMove);
 			if (gl.canvas.parentElement === ctn) ctn.removeChild(gl.canvas);
 			gl.getExtension("WEBGL_lose_context")?.loseContext();
 			loadAnimationStartRef.current = 0;
 			timeOffsetRef.current = Math.random() * 100;
 		};
-	}, [dpr, pause, timeScale, scale, gridMul, digitSize, scanlineIntensity, glitchAmount, flickerAmount, noiseAmp, chromaticAberration, ditherValue, curvature, tintVec, mouseReact, mouseStrength, pageLoadAnimation, brightness, handleMouseMove]);
+	}, [dpr, pause, timeScale, scale, gridMul, digitSize, scanlineIntensity, glitchAmount, flickerAmount, noiseAmp, chromaticAberration, ditherValue, curvature, tintVec, mouseReact, mouseStrength, pageLoadAnimation, brightness, handleMouseMove, maskKey, maskHalfSize, cursorMask]);
 
 	return <div ref={containerRef} className={`w-full h-full relative overflow-hidden ${className}`} style={style} />;
 }

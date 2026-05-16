@@ -2,6 +2,41 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { authClient } from "@tripwire/auth/client";
 import { LandingHeader } from "#/components/landing/header";
 import FaultyTerminal from "#/components/landing/faulty-terminal";
+import {
+	TRIPWIRE_EYE_OUTER_PATH,
+	TRIPWIRE_EYE_OUTER_VIEWBOX,
+	TRIPWIRE_EYE_SOCKET_PATH,
+	TRIPWIRE_EYE_SOCKET_VIEWBOX,
+	TRIPWIRE_EYE_SOCKET_RECT_IN_OUTER,
+	TRIPWIRE_EYE_PUPIL_PATH,
+	TRIPWIRE_EYE_PUPIL_VIEWBOX,
+	TRIPWIRE_EYE_PUPIL_RECT_IN_OUTER,
+} from "#/components/landing/tripwire-eye";
+
+const EYE_CURSOR_MASK = {
+	viewBox: TRIPWIRE_EYE_OUTER_VIEWBOX,
+	width: 1.05,
+	layers: [
+		{
+			path: TRIPWIRE_EYE_OUTER_PATH,
+			viewBox: TRIPWIRE_EYE_OUTER_VIEWBOX,
+			rect: [0, 0, TRIPWIRE_EYE_OUTER_VIEWBOX[0], TRIPWIRE_EYE_OUTER_VIEWBOX[1]] as const,
+			mode: "add" as const,
+		},
+		{
+			path: TRIPWIRE_EYE_SOCKET_PATH,
+			viewBox: TRIPWIRE_EYE_SOCKET_VIEWBOX,
+			rect: TRIPWIRE_EYE_SOCKET_RECT_IN_OUTER,
+			mode: "subtract" as const,
+		},
+		{
+			path: TRIPWIRE_EYE_PUPIL_PATH,
+			viewBox: TRIPWIRE_EYE_PUPIL_VIEWBOX,
+			rect: TRIPWIRE_EYE_PUPIL_RECT_IN_OUTER,
+			mode: "add" as const,
+		},
+	],
+};
 
 export const Route = createFileRoute("/")({
 	component: LandingPage,
@@ -24,10 +59,11 @@ function LandingPage() {
 					chromaticAberration={0}
 					dither={0}
 					curvature={0.1}
-					tint="#202020"
+					tint="#A7EF9E"
 					mouseReact
 					mouseStrength={0.5}
-					brightness={0.6}
+					cursorMask={EYE_CURSOR_MASK}
+					brightness={0.5}
 				/>
 			</div>
 
