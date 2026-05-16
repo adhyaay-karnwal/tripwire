@@ -6,6 +6,7 @@ import { useWorkspace, useWorkspacePath } from "#/lib/workspace-context";
 import { useGitHubUserFormatted } from "#/hooks/use-github-user";
 import { toastManager } from "#/components/ui/toast";
 import { toastFromError } from "#/lib/toast-error";
+import { invalidateListCaches } from "#/lib/cache";
 
 export const Route = createFileRoute("/_app/$orgHandle/events/$eventId")({
 	component: EventDetailPage,
@@ -60,7 +61,7 @@ function EventDetailPage() {
 		...trpc.blacklist.add.mutationOptions(),
 		onSuccess: () => {
 			setActionStatus("blacklisted");
-			queryClient.invalidateQueries({ queryKey: ["blacklist"] });
+			if (repoId) invalidateListCaches(queryClient, repoId);
 			toastManager.add({
 				type: "success",
 				title: "User blacklisted",
@@ -75,7 +76,7 @@ function EventDetailPage() {
 		...trpc.whitelist.add.mutationOptions(),
 		onSuccess: () => {
 			setActionStatus("safe");
-			queryClient.invalidateQueries({ queryKey: ["whitelist"] });
+			if (repoId) invalidateListCaches(queryClient, repoId);
 			toastManager.add({
 				type: "success",
 				title: "User whitelisted",

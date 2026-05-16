@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchGitHubUser, fetchUserRepos, formatAccountAge, formatNumber } from "#/utils/github";
-import type { GitHubUser, GitHubRepository } from "#/types/github";
+import { fetchPublicProfile } from "@tripwire/github";
+import { qk } from "#/lib/query-keys";
 
 export interface GitHubUserProfile {
 	username: string;
@@ -18,40 +18,52 @@ export interface GitHubUserProfile {
 	url: string;
 }
 
-function transformToProfile(user: GitHubUser, repos: GitHubRepository[]): GitHubUserProfile {
-	const totalStars = repos.reduce((sum, r) => sum + r.stargazers_count, 0);
-	const hasReadme = repos.some((r) => r.name.toLowerCase() === user.login.toLowerCase());
+function formatAccountAge(createdAt: string): string {
+	const created = new Date(createdAt);
+	const now = new Date();
+	const diffMs = now.getTime() - created.getTime();
+	const days = Math.floor(diffMs / 86400000);
+	if (days < 30) return `${days} day${days !== 1 ? "s" : ""}`;
+	const months = Math.floor(days / 30);
+	if (months < 12) return `${months} month${months !== 1 ? "s" : ""}`;
+	const years = Math.floor(days / 365);
+	const remMonths = Math.floor((days % 365) / 30);
+	return remMonths > 0 ? `${years}y ${remMonths}mo` : `${years}y`;
+}
 
-	return {
-		username: user.login,
-		name: user.name,
-		avatar: user.avatar_url,
-		location: user.location,
-		bio: user.bio,
-		company: user.company,
-		accountAge: formatAccountAge(user.created_at),
-		publicRepos: user.public_repos,
-		followers: user.followers,
-		following: user.following,
-		hasReadme,
-		totalStars,
-		url: user.html_url,
-	};
+function formatNumber(n: number): string {
+	if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+	if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+	return String(n);
 }
 
 export function useGitHubUser(username: string | undefined) {
 	return useQuery({
-		queryKey: ["github-user", username],
+		queryKey: qk.github.profile(username ?? ""),
 		queryFn: async () => {
 			if (!username) throw new Error("Username required");
-			const [user, repos] = await Promise.all([
-				fetchGitHubUser(username),
-				fetchUserRepos(username, 100),
-			]);
-			return transformToProfile(user, repos);
+			const profile = await fetchPublicProfile(username);
+			if (!profile) throw new Error(`User @${username} not found`);
+
+			const { user, totalStars, hasReadme } = profile;
+			return {
+				username: user.login,
+				name: user.name,
+				avatar: user.avatar_url,
+				location: user.location,
+				bio: user.bio,
+				company: user.company,
+				accountAge: formatAccountAge(user.created_at),
+				publicRepos: user.public_repos,
+				followers: user.followers,
+				following: user.following,
+				hasReadme,
+				totalStars,
+				url: user.html_url,
+			} satisfies GitHubUserProfile;
 		},
 		enabled: !!username,
-		staleTime: 5 * 60 * 1000, // 5 minutes
+		staleTime: 5 * 60 * 1000,
 		retry: 1,
 	});
 }

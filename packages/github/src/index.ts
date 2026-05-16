@@ -3,6 +3,7 @@
 // that touches the events table or rule config lives in @tripwire/core.
 
 export * from "./github-api";
+export * from "./public";
 export * from "./install-state";
 export * from "./verify-webhook";
 export * from "./repo-files";

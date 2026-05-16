@@ -13,9 +13,18 @@ import {
 import { toastFromError } from "#/lib/toast-error";
 import { TripwireLogo } from "#/components/icons/tripwire-logo";
 import { GithubIcon } from "#/components/icons/github";
+import { buildSeoMeta, canonicalLink } from "#/lib/seo";
 
 export const Route = createFileRoute("/vouched")({
 	component: VouchedUsersPage,
+	head: () => ({
+		meta: buildSeoMeta({
+			title: "Vouched Contributors",
+			description: "GitHub users verified by Tripwire maintainers. Vouched contributors can be auto-trusted across repositories.",
+			path: "/vouched",
+		}),
+		links: [canonicalLink("/vouched")],
+	}),
 });
 
 function VouchedUsersPage() {

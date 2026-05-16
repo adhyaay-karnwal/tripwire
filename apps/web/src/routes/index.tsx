@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { buildSeoMeta, canonicalLink } from "#/lib/seo";
 import { authClient } from "@tripwire/auth/client";
 import { LandingHeader } from "#/components/landing/header";
 import FaultyTerminal from "#/components/landing/faulty-terminal";
@@ -40,6 +41,15 @@ const EYE_CURSOR_MASK = {
 
 export const Route = createFileRoute("/")({
 	component: LandingPage,
+	head: () => ({
+		meta: buildSeoMeta({
+			title: "Tripwire",
+			rawTitle: true,
+			description: "Catch slop before it catches up with you. Open source GitHub moderation for spam PRs, bot accounts, and AI-generated contributions.",
+			path: "/",
+		}),
+		links: [canonicalLink("/")],
+	}),
 });
 
 function LandingPage() {

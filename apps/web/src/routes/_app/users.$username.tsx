@@ -9,9 +9,18 @@ import { PinnedRepos } from "#/components/profile/pinned-repos";
 import { GithubIcon } from "#/components/icons/github";
 import { CommunitySignals } from "#/components/profile/community-signals";
 import { Button } from "#/components/ui/button";
+import { buildSeoMeta } from "#/lib/seo";
 
 export const Route = createFileRoute("/_app/users/$username")({
 	component: UserProfilePage,
+	head: ({ params }) => ({
+		meta: buildSeoMeta({
+			title: `@${params.username}`,
+			description: `GitHub profile and Tripwire contributor score for @${params.username}.`,
+			path: `/users/${params.username}`,
+			type: "profile",
+		}),
+	}),
 });
 
 function UserProfilePage() {
