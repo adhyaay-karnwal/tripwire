@@ -12,6 +12,7 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { UnicodeSpinner } from "#/components/ui/unicode-spinner";
 import { useCustomer } from "autumn-js/react";
 import { useRequestNotifications } from "#/lib/use-request-notifications";
+import Dither from "#/components/Dither";
 import type { UIMessage } from "#/types/chat";
 
 export function AppShell() {
@@ -79,8 +80,29 @@ function AppShellInner() {
 					}}
 				>
 					{showSidePanel && (
-						<div className="h-full w-full flex flex-col">
-							<div className="flex items-center justify-between pl-3 pr-2 pt-3 pb-2 shrink-0">
+						<div className="h-full w-full flex flex-col relative">
+							{/* Dither background at the bottom with upward fade */}
+							<div
+								className="pointer-events-none absolute inset-x-0 bottom-0 h-[350px] z-0"
+								style={{
+									maskImage: "linear-gradient(to bottom, transparent 0%, transparent 35%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0.4) 80%, black 100%)",
+									WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, transparent 35%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0.4) 80%, black 100%)",
+								}}
+							>
+								<Dither
+									waveColor={[0.4627450980392157, 0.4627450980392157, 0.4627450980392157]}
+									disableAnimation={false}
+									enableMouseInteraction={false}
+									mouseRadius={0.1}
+									colorNum={4}
+									pixelSize={2}
+									waveAmplitude={0.25}
+									waveFrequency={3}
+									waveSpeed={0.1}
+								/>
+							</div>
+
+							<div className="flex items-center justify-between pl-3 pr-2 pt-3 pb-2 shrink-0 relative z-10">
 								<div className="flex items-center gap-2 min-w-0">
 									<svg
 										viewBox="0 0 610.08 589.32"
@@ -130,20 +152,22 @@ function AppShellInner() {
 								</div>
 							</div>
 
-							<div className="px-3 pb-3 shrink-0">
+							<div className="px-3 pb-3 shrink-0 relative z-10">
 								<p className="text-[13px] leading-[19px] text-tw-text-secondary">
 									Ask about anything in your digest, or get help investigating a
 									flagged contributor.
 								</p>
 							</div>
 
-							<div className="flex-1 min-h-0 overflow-auto px-2 pb-2">
+							<div className="flex-1 min-h-0 overflow-auto px-2 pb-2 relative z-10">
 								<ChatThread />
 							</div>
 
-							<SidebarRecentChats />
+							<div className="relative z-10">
+								<SidebarRecentChats />
+							</div>
 
-							<div className="px-2 pb-2 shrink-0">
+							<div className="px-2 pb-2 shrink-0 relative z-10">
 								<div className="flex flex-col items-start gap-0 rounded-2xl bg-tw-card p-1.5">
 									<div className="flex items-center w-full gap-1.5">
 										<input

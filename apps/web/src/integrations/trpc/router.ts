@@ -10,6 +10,7 @@ import { reputationRouter } from "./routers/reputation";
 import { vouchesRouter } from "./routers/vouches";
 import { fakeBountiesRouter } from "./routers/fake-bounties";
 import { apiKeysRouter } from "./routers/api-keys";
+import { preferencesRouter } from "./routers/preferences";
 
 export const trpcRouter = createTRPCRouter({
 	orgs: orgsRouter,
@@ -24,6 +25,7 @@ export const trpcRouter = createTRPCRouter({
 	vouches: vouchesRouter,
 	fakeBounties: fakeBountiesRouter,
 	apiKeys: apiKeysRouter,
+	preferences: preferencesRouter,
 });
 
 export type TRPCRouter = typeof trpcRouter;

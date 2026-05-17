@@ -4,10 +4,11 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 	type ReactNode,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { authClient } from "@tripwire/auth/client";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -100,6 +101,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 		}
 	});
 
+	// Load saved preferences from DB
+	const prefsQuery = useQuery(
+		trpc.preferences.get.queryOptions(undefined, { staleTime: 60_000 }),
+	);
+	const savePrefs = useMutation(trpc.preferences.update.mutationOptions());
+	const initializedFromDb = useRef(false);
+
 	// Extract org from URL
 	const orgHandle = useMemo(() => extractOrgHandle(pathname), [pathname]);
 
@@ -118,11 +126,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 		[orgsData],
 	);
 
-	// Resolve current org from URL handle, fall back to first org
-	const currentOrg = useMemo(
-		() => orgs.find((o) => o.slug === orgHandle) ?? orgs[0] ?? null,
-		[orgs, orgHandle],
-	);
+	// Resolve current org from URL handle, fall back to saved preference, then first org
+	const currentOrg = useMemo(() => {
+		if (orgHandle) {
+			const fromUrl = orgs.find((o) => o.slug === orgHandle);
+			if (fromUrl) return fromUrl;
+		}
+		if (prefsQuery.data?.activeOrgId) {
+			const fromDb = orgs.find((o) => o.id === prefsQuery.data.activeOrgId);
+			if (fromDb) return fromDb;
+		}
+		return orgs[0] ?? null;
+	}, [orgs, orgHandle, prefsQuery.data?.activeOrgId]);
 
 	// Fetch repos scoped to the current BA org
 	const reposQuery = useQuery(
@@ -142,14 +157,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 		[reposQuery.data],
 	);
 
-	// Auto-select repo: prefer stored repo if it exists in this org's repos, else first
+	// Auto-select repo: prefer DB-saved repo, then localStorage, then first
 	useEffect(() => {
 		if (repos.length === 0) return;
 		if (repo && repos.find((r) => r.id === repo.id)) return;
+
+		// Try DB preference first
+		if (!initializedFromDb.current && prefsQuery.data?.activeRepoId) {
+			const fromDb = repos.find((r) => r.id === prefsQuery.data.activeRepoId);
+			if (fromDb) {
+				initializedFromDb.current = true;
+				setRepoState(fromDb);
+				try { localStorage.setItem("tw:activeRepo", JSON.stringify(fromDb)); } catch {}
+				return;
+			}
+		}
+
 		const fallback = repos[0];
 		setRepoState(fallback);
 		try { localStorage.setItem("tw:activeRepo", JSON.stringify(fallback)); } catch {}
-	}, [repos, repo]);
+	}, [repos, repo, prefsQuery.data?.activeRepoId]);
 
 	// Set active BA org when org changes
 	useEffect(() => {
@@ -158,17 +185,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 		}
 	}, [currentOrg?.id]);
 
-	// setOrg navigates to the new org's current page
+	// setOrg navigates to the new org's current page and persists to DB
 	const setOrg = useCallback(
 		(newOrg: Org | null) => {
 			if (!newOrg) return;
 			const page = orgHandle ? getCurrentPage(pathname) : "home";
 			navigate({ to: buildWorkspacePath(newOrg.slug, page) });
+			savePrefs.mutate({ activeOrgId: newOrg.id });
 		},
-		[navigate, pathname, orgHandle],
+		[navigate, pathname, orgHandle, savePrefs],
 	);
 
-	// setRepo updates state and persists to localStorage
+	// setRepo updates state, persists to localStorage and DB
 	const setRepo = useCallback(
 		(newRepo: Repo | null) => {
 			setRepoState(newRepo);
@@ -179,8 +207,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 					localStorage.removeItem("tw:activeRepo");
 				}
 			} catch { /* SSR or storage full */ }
+			savePrefs.mutate({ activeRepoId: newRepo?.id ?? null });
 		},
-		[],
+		[savePrefs],
 	);
 
 	const value = useMemo<WorkspaceContextValue>(

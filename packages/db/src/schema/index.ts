@@ -17,3 +17,4 @@ export * from "./vouch-requests";
 export * from "./fake-bounties";
 export * from "./api-keys";
 export * from "./waitlist";
+export * from "./user-preferences";
