@@ -51,8 +51,7 @@ export function AgentPanel({ workflowId }: AgentPanelProps) {
 				/>
 			</div>
 
-			<div className="flex items-center justify-between px-4 py-3 border-b border-tw-border shrink-0 relative z-10">
-				<span className="text-[13px] font-medium text-tw-text-secondary">Workflow Agent</span>
+			<div className="flex items-center justify-end px-4 pt-2 pb-1 shrink-0 relative z-10">
 				<button
 					type="button"
 					onClick={newChat}
@@ -84,7 +83,7 @@ export function AgentPanel({ workflowId }: AgentPanelProps) {
 				<ChatComposer
 					disabled={isLoading || isQuotaExhausted}
 					isLoading={isLoading}
-					placeholder="Ask about this workflow..."
+					placeholder="Generate nodes, edit triggers, or ask about this workflow..."
 					onSend={sendMessage}
 				/>
 			</div>
