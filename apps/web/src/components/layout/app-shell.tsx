@@ -58,7 +58,7 @@ function AppShellInner() {
 		let hasMetadata = false;
 
 		for (const msg of chatMessages) {
-			const meta = (msg as Record<string, unknown>).metadata as Record<string, unknown> | undefined;
+			const meta = (msg as unknown as Record<string, unknown>).metadata as Record<string, unknown> | undefined;
 			if (meta?.usage) {
 				hasMetadata = true;
 				const u = meta.usage as Record<string, number>;
@@ -73,7 +73,7 @@ function AppShellInner() {
 		// Fallback: estimate tokens from message text (~4 chars per token)
 		if (!hasMetadata && chatMessages.length > 0) {
 			for (const msg of chatMessages) {
-				const parts = (msg as Record<string, unknown>).parts as Array<{ type: string; text?: string; content?: string }> | undefined;
+				const parts = (msg as unknown as Record<string, unknown>).parts as Array<{ type: string; text?: string; content?: string }> | undefined;
 				let charCount = 0;
 				if (parts) {
 					for (const p of parts) {
