@@ -59,19 +59,11 @@ type FilterState = {
 	username: string;
 };
 
+import { RULE_META } from "@tripwire/db";
 const RULE_NAMES: Record<string, string> = {
-	requireProfilePicture: "Profile Picture",
-	accountAge: "Account Age",
-	minMergedPrs: "Min Merged PRs",
-	languageRequirement: "Language",
-	aiSlopDetection: "AI Slop Detection",
-	maxPrsPerDay: "Max PRs/Day",
-	maxFilesChanged: "Max Files Changed",
-	repoActivityMinimum: "Repo Activity",
-	requireProfileReadme: "Profile README",
-	vouchedUsersOnly: "Vouched Users Only",
-	aiHoneypot: "AI Honeypot",
+	...Object.fromEntries(Object.entries(RULE_META).map(([k, v]) => [k, v.name])),
 	blacklist: "Blacklist",
+	requireProfilePicture: "Profile Picture", // legacy
 };
 
 const CONTENT_TYPE_LABELS: Record<string, string> = {

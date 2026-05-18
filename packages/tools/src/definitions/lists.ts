@@ -19,7 +19,6 @@ import {
 } from "../registry";
 import { requireRepoId } from "../helpers";
 
-// ─── Helpers local to this module ────────────────────────────────
 
 function usernameEq(column: unknown, username: string) {
 	return sql`lower(${column}) = ${username.toLowerCase()}`;
@@ -72,7 +71,6 @@ async function getTokenForRepo(repoId: string): Promise<string | null> {
 const fmtDate = (d: Date) =>
 	d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-// ─── Reads ───────────────────────────────────────────────────────
 
 const listLists = defineTool({
 	name: "list_lists",
@@ -211,7 +209,6 @@ const checkLists = defineTool({
 		}),
 });
 
-// ─── Mutations ───────────────────────────────────────────────────
 
 const addToBlacklist = defineTool({
 	name: "add_to_blacklist",
@@ -429,7 +426,6 @@ const removeFromWhitelist = defineTool({
 	},
 });
 
-// ─── Chat-only atomic moves ──────────────────────────────────────
 
 const moveToWhitelist = defineTool({
 	name: "move_to_whitelist",
@@ -561,7 +557,6 @@ const moveToBlacklist = defineTool({
 	},
 });
 
-// ─── Score reset ─────────────────────────────────────────────────
 
 const resetContributorScoreTool = defineTool({
 	name: "reset_contributor_score",

@@ -1,6 +1,5 @@
 import type { z } from "zod";
 
-// ─── Context ─────────────────────────────────────────────────────
 // Every tool handler receives a ToolContext. The shared definitions
 // never put `repoId` in their input schema — each adapter is
 // responsible for surfacing it:
@@ -20,13 +19,11 @@ export interface ToolContext {
 	repoId?: string;
 }
 
-// ─── Surface ─────────────────────────────────────────────────────
 
 export type ToolSurface = "mcp" | "chat";
 
 export const ALL_SURFACES = ["mcp", "chat"] as const satisfies readonly ToolSurface[];
 
-// ─── Chat render output ──────────────────────────────────────────
 // Chat tools return a json-render spec. The shape mirrors what
 // makeSpec() produced in the old AI tool layer.
 
@@ -51,7 +48,6 @@ export function makeSpec(type: string, props: Record<string, unknown>): JsonRend
 	};
 }
 
-// ─── Tool definition ─────────────────────────────────────────────
 
 export interface ToolDefinition<
 	TShape extends z.ZodRawShape = z.ZodRawShape,
@@ -125,7 +121,6 @@ export function defineTool<TShape extends z.ZodRawShape, TOutput>(
 // biome-ignore lint/suspicious/noExplicitAny: registry holds heterogeneous tools
 export type AnyToolDefinition = ToolDefinition<any, any>;
 
-// ─── Standard result shape for mutations ─────────────────────────
 // Mutation handlers can return whatever they want, but most return
 // this shape so the default chat presenter produces a usable card.
 
@@ -136,7 +131,6 @@ export interface MutationResult {
 	data?: Record<string, unknown>;
 }
 
-// ─── Registry helpers ────────────────────────────────────────────
 
 export function filterToolsForSurface(
 	tools: readonly AnyToolDefinition[],

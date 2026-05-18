@@ -99,7 +99,6 @@ function clamp(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max);
 }
 
-// ─── Line-item collector ─────────────────────────────────────────
 
 class CategoryBuilder {
 	total = 0;
@@ -114,7 +113,6 @@ class CategoryBuilder {
 	}
 }
 
-// ─── Achievement scoring ─────────────────────────────────────────
 
 const TIER_POINTS: Record<number, number> = {
 	1: 1,
@@ -143,7 +141,6 @@ function achievementPoints(a: GitHubAchievement): number {
 	return tierPts * rarity;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────
 
 export function formatAccountAge(days: number): string {
 	if (days < 30) return `${days}d`;
@@ -153,7 +150,6 @@ export function formatAccountAge(days: number): string {
 	return months > 0 ? `${years}y ${months}mo` : `${years}y`;
 }
 
-// ─── Category scorers ────────────────────────────────────────────
 
 interface CategoryScore {
 	value: number;
@@ -471,7 +467,6 @@ function scoreRedFlags(input: ScoreInput, sink: ScoreLineItem[]): number {
 	return clamped;
 }
 
-// ─── Main ────────────────────────────────────────────────────────
 
 export function computeContributorScore(input: ScoreInput): ScoreResult {
 	const lineItems: ScoreLineItem[] = [];

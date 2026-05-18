@@ -122,7 +122,6 @@ const updateRuleAction = defineTool({
 	},
 });
 
-// ─── Typed per-rule value setters ────────────────────────────────
 
 const setMinMergedPrs = defineTool({
 	name: "set_min_merged_prs",

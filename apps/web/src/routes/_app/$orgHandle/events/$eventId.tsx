@@ -848,23 +848,9 @@ function getEventTitle(action: string, severity: string | null | undefined): str
 	return title;
 }
 
+import { RULE_META } from "@tripwire/db";
 function formatRuleName(ruleName: string): string {
-	const names: Record<string, string> = {
-		cryptoAddressDetection: "Crypto address detection",
-		spamDetection: "Spam pattern match",
-		accountAge: "Account age",
-		repoActivityMinimum: "Repo activity",
-		languageRequirement: "Language requirement",
-		requireProfilePicture: "Profile picture",
-		minMergedPrs: "Minimum merged PRs",
-		maxPrsPerDay: "Max PRs per day",
-		maxFilesChanged: "Max files changed",
-		requireProfileReadme: "Profile README",
-		aiSlopDetection: "AI slop detection",
-		vouchedUsersOnly: "Vouched users only",
-		aiHoneypot: "AI honeypot",
-	};
-	return names[ruleName] || ruleName;
+	return (RULE_META as Record<string, { name: string }>)[ruleName]?.name ?? ruleName;
 }
 
 function formatRelativeTime(date: Date | undefined | null): string {

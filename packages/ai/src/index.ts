@@ -7,4 +7,5 @@
 
 export * from "./credit-schema";
 export * from "./prompt";
+// model-config is exported via "./model-config" subpath (browser-safe, no tokenlens)
 // credit-middleware is exported via the subpath only (Nitro-coupled)

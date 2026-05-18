@@ -77,7 +77,7 @@ export async function computeCostCents(
 
 				console.log([
 					`[billing:cost] ${modelId}`,
-					`  tokens: ${promptTokens} in / ${completionTokens} out`,
+					`  tokens: ${promptTokens} in / ${completionTokens} out | context: ${promptTokens + completionTokens} total`,
 					`  rates: $${inputRate}/token in, $${outputRate}/token out`,
 					`  provider: $${rawCostUsd.toFixed(6)} | with ${MARKUP}x: ${cents}c`,
 				].join("\n"));
@@ -95,7 +95,7 @@ export async function computeCostCents(
 	if (fallback) {
 		const { rawCostUsd, cents } = computeFromRates(fallback.input, fallback.output, promptTokens, completionTokens);
 		console.warn(
-			`[billing:fallback] ${modelId} | $${rawCostUsd.toFixed(6)} provider | ${cents}c charged (hardcoded rates)`,
+			`[billing:fallback] ${modelId} | ${promptTokens} in / ${completionTokens} out | context: ${promptTokens + completionTokens} | $${rawCostUsd.toFixed(6)} provider | ${cents}c charged (hardcoded rates)`,
 		);
 		return cents;
 	}
@@ -105,7 +105,7 @@ export async function computeCostCents(
 	const safeRates = FALLBACK_RATES["openai/gpt-5.4-mini"]!;
 	const { rawCostUsd, cents } = computeFromRates(safeRates.input, safeRates.output, promptTokens, completionTokens);
 	console.warn(
-		`[billing:fallback] unknown model "${modelId}" | using gpt-5.4-mini rates | $${rawCostUsd.toFixed(6)} | ${cents}c charged`,
+		`[billing:fallback] unknown model "${modelId}" | ${promptTokens} in / ${completionTokens} out | context: ${promptTokens + completionTokens} | using gpt-5.4-mini rates | $${rawCostUsd.toFixed(6)} | ${cents}c charged`,
 	);
 	return cents;
 }

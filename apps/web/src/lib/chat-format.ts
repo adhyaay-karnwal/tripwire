@@ -2,11 +2,11 @@ import { getToolName, isToolUIPart } from "ai";
 import type { UIMessage, MessagePart } from "#/types/chat";
 import type { ActionResultData } from "#/types/chat";
 
-export function getPartKey(part: MessagePart, messageId: string): string {
-	if (isToolPart(part)) return getToolCallId(part) ?? `${messageId}-${part.type}`;
-	if (part.type === "tool-result") return `${messageId}-result-${part.toolCallId ?? part.id}`;
-	if (part.type === "text") return `${messageId}-text`;
-	return `${messageId}-${part.type}`;
+export function getPartKey(part: MessagePart, messageId: string, index?: number): string {
+	const mid = messageId || "msg";
+	if (isToolPart(part)) return getToolCallId(part) ?? `${mid}-tool-${index ?? 0}`;
+	if (part.type === "tool-result") return `${mid}-result-${part.toolCallId ?? part.id ?? index ?? 0}`;
+	return `${mid}-${part.type}-${index ?? 0}`;
 }
 
 export function getTextContent(message: UIMessage): string {

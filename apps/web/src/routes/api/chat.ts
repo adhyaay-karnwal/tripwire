@@ -264,6 +264,12 @@ export const Route = createFileRoute("/api/chat")({
 
 					return result.toUIMessageStreamResponse({
 						originalMessages: messages,
+						messageMetadata: ({ part }) => {
+							if (part.type === "finish") {
+								return { usage: part.usage, modelId: aiModel };
+							}
+							return undefined;
+						},
 						onFinish: async ({ messages: finishedMessages }) => {
 							if (typeof conversationId !== "string") return;
 							await db

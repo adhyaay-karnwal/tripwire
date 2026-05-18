@@ -9,7 +9,6 @@ import {
 } from "drizzle-orm/pg-core";
 import { repositories } from "./installations";
 
-// ─── Node & Edge types stored as JSONB ──────────────────────────
 
 export type WorkflowTrigger =
 	| "pr_opened"
@@ -70,7 +69,6 @@ export interface WorkflowDefinition {
 	edges: WorkflowEdge[];
 }
 
-// ─── Table ──────────────────────────────────────────────────────
 
 export const workflows = pgTable(
 	"workflows",

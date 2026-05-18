@@ -8,7 +8,8 @@
 		"./credit-middleware": "./src/credit-middleware.ts",
 		"./credit-schema": "./src/credit-schema.ts",
 		"./prompt": "./src/prompt.ts",
-		"./components": "./src/components/index.ts"
+		"./components": "./src/components/index.ts",
+		"./model-config": "./src/model-config.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit"

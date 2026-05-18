@@ -24,6 +24,11 @@ To create a new task:
 mdn create --title "Description" --status todo --priority medium --agent <your-agent-name>
 ```
 
+## Code Style
+
+- No helper functions inside components or tool files. Put them in `apps/web/src/lib/` or `packages/*/src/` utils.
+- Use the shared utilities in `apps/web/src/lib/format.ts` for formatting (camelCase labels, compact numbers, etc.)
+
 ## Commit Messages & Pull Requests
 
 Always include the Median task ID in commit messages and PR titles so tasks get marked automatically.

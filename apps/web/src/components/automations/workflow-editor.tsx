@@ -22,10 +22,11 @@ import {
 	triggerLabels,
 	ruleLabels,
 	actionLabels,
+	HIDDEN_RULES,
 } from "./node-types";
+import { RULE_KEYS } from "@tripwire/db";
 import Dither from "#/components/Dither";
 
-// ─── Palette items (drag to canvas) ────────────────────────────
 
 interface PaletteItem {
 	type: string;
@@ -48,9 +49,9 @@ const paletteGroups: { title: string; items: PaletteItem[] }[] = [
 	},
 	{
 		title: "Rules",
-		items: Object.entries(ruleLabels).map(([key, label]) => ({
+		items: RULE_KEYS.filter((key) => !HIDDEN_RULES.has(key)).map((key) => ({
 			type: "rule",
-			label,
+			label: ruleLabels[key],
 			sublabel: "Pass / Fail check",
 			color: nodeColors.rule,
 			data: { rule: key, params: {} },
@@ -88,9 +89,7 @@ const paletteGroups: { title: string; items: PaletteItem[] }[] = [
 	{
 		title: "Delays",
 		items: [
-			{ type: "delay", label: "Wait 5 min", sublabel: "Pause execution", color: nodeColors.delay, data: { duration: "5m" } },
-			{ type: "delay", label: "Wait 1 hour", sublabel: "Pause execution", color: nodeColors.delay, data: { duration: "1h" } },
-			{ type: "delay", label: "Wait 1 day", sublabel: "Pause execution", color: nodeColors.delay, data: { duration: "1d" } },
+			{ type: "delay", label: "Delay", sublabel: "Configurable wait", color: nodeColors.delay, data: { duration: "5m" } },
 		],
 	},
 	{
@@ -105,7 +104,6 @@ const paletteGroups: { title: string; items: PaletteItem[] }[] = [
 	},
 ];
 
-// ─── Palette sidebar ────────────────────────────────────────────
 
 function NodePalette({ search, setSearch }: { search: string; setSearch: (s: string) => void }) {
 	const onDragStart = (e: React.DragEvent, item: PaletteItem) => {
@@ -202,7 +200,6 @@ function NodePalette({ search, setSearch }: { search: string; setSearch: (s: str
 	);
 }
 
-// ─── Simulation engine ─────────────────────────────────────────
 
 type SimMode = "pass" | "fail" | "user";
 
@@ -376,7 +373,6 @@ function simulateWorkflow(nodes: Node[], edges: Edge[], mode: SimMode, userData:
 	return results;
 }
 
-// ─── Simulation panel ──────────────────────────────────────────
 
 function SimulationPanel({
 	nodes,
@@ -627,7 +623,6 @@ function SimulationPanel({
 	);
 }
 
-// ─── Main editor ────────────────────────────────────────────────
 
 interface WorkflowEditorProps {
 	initialNodes?: Node[];

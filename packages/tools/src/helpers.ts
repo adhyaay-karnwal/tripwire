@@ -12,23 +12,12 @@ import { logEvent } from '@tripwire/core';
 import { assertRepoOwner } from '@tripwire/core';
 import type { MutationResult, ToolContext } from "./registry";
 
-// ─── Rule-name labels for log messages ───────────────────────────
 
-export const RULE_NAMES: Record<RuleKey, string> = {
-	aiSlopDetection: "AI Slop Detection",
-	languageRequirement: "Language Requirement",
-	minMergedPrs: "Minimum Merged PRs",
-	accountAge: "Account Age",
-	maxPrsPerDay: "Max PRs Per Day",
-	maxFilesChanged: "Max Files Changed",
-	repoActivityMinimum: "Repo Activity Minimum",
-	requireProfileReadme: "Require Profile README",
-	cryptoAddressDetection: "Crypto Address Detection",
-	vouchedUsersOnly: "Vouched Users Only",
-	aiHoneypot: "AI Honeypot",
-};
+import { RULE_META } from "@tripwire/db";
+export const RULE_NAMES: Record<RuleKey, string> = Object.fromEntries(
+	Object.entries(RULE_META).map(([k, v]) => [k, v.name]),
+) as Record<RuleKey, string>;
 
-// ─── Repo ID requirement ─────────────────────────────────────────
 
 export function requireRepoId(ctx: ToolContext): string {
 	if (!ctx.repoId) {
@@ -37,7 +26,6 @@ export function requireRepoId(ctx: ToolContext): string {
 	return ctx.repoId;
 }
 
-// ─── Config read/write ───────────────────────────────────────────
 
 export async function loadRuleConfig(repoId: string): Promise<RuleConfig> {
 	const [row] = await db
@@ -63,7 +51,6 @@ async function persistRuleConfig(repoId: string, config: RuleConfig): Promise<vo
 	}
 }
 
-// ─── Mutation helper ─────────────────────────────────────────────
 
 export interface RuleMutationOpts {
 	ctx: ToolContext;
@@ -117,7 +104,6 @@ export async function applyRuleMutation(
 	return { ok: true, message: opts.summary };
 }
 
-// ─── Scope formatting ────────────────────────────────────────────
 
 export function describeScope(scope: {
 	pullRequests?: boolean;

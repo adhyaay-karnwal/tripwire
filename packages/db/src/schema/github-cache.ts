@@ -10,7 +10,6 @@ import {
 	uuid,
 } from "drizzle-orm/pg-core";
 
-// ─── Types for cached JSONB columns ────────────────────────────
 
 export interface CachedPR {
 	title: string;
@@ -61,7 +60,6 @@ export interface CachedRepo {
 	archived: boolean;
 }
 
-// ─── Table ─────────────────────────────────────────────────────
 
 /**
  * Cached GitHub user data — stores enriched API responses (PRs with

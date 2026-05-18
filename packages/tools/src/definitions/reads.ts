@@ -102,7 +102,6 @@ async function fetchGitHubUser(username: string, token?: string): Promise<GitHub
 const fmtDate = (d: Date) =>
 	d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
-// ─── list_repos (no repo context required) ───────────────────────
 
 const listRepos = defineTool({
 	name: "list_repos",
@@ -125,7 +124,6 @@ const listRepos = defineTool({
 			.where(eq(organizations.ownerId, ctx.userId)),
 });
 
-// ─── list_events ─────────────────────────────────────────────────
 
 const listEvents = defineTool({
 	name: "list_events",
@@ -167,7 +165,6 @@ const listEvents = defineTool({
 		}),
 });
 
-// ─── get_event ───────────────────────────────────────────────────
 
 const getEvent = defineTool({
 	name: "get_event",
@@ -190,9 +187,7 @@ const getEvent = defineTool({
 		}),
 });
 
-// ─── lookup_user ─────────────────────────────────────────────────
 
-// ─── Shared user signal fetch ────────────────────────────────────
 // Used by both lookup_user (UserCard) and score_breakdown (ScoreBreakdown).
 
 interface UserSignals {
@@ -511,7 +506,6 @@ const lookupUser = defineTool({
 	},
 });
 
-// ─── score_breakdown ─────────────────────────────────────────────
 
 const CATEGORY_META: Record<
 	ScoreCategory,
@@ -588,7 +582,6 @@ const scoreBreakdown = defineTool({
 		}),
 });
 
-// ─── explain_score_flag ────────────────────────────────────────────
 
 const explainScoreFlag = defineTool({
 	name: "explain_score_flag",
@@ -824,7 +817,6 @@ const explainScoreFlag = defineTool({
 	},
 });
 
-// ─── reputation_leaderboard ──────────────────────────────────────
 
 const getReputationLeaderboard = defineTool({
 	name: "get_reputation_leaderboard",
@@ -863,7 +855,6 @@ const getReputationLeaderboard = defineTool({
 		}),
 });
 
-// ─── Workflow tools ────────────────────────────────────────────
 
 const listWorkflows = defineTool({
 	name: "list_workflows",
@@ -966,7 +957,6 @@ const describeWorkflow = defineTool({
 	},
 });
 
-// ─── GitHub data factory tools ─────────────────────────────────
 
 const getUserPrs = defineTool({
 	name: "get_user_prs",

@@ -13,12 +13,10 @@ import { fetchUserGraphQL, fetchUserContributions } from "./user";
 import type { GitHubUserGraphQL, PinnedRepo, ContributionsData } from "./user";
 import type { CachedPR, CachedRepo } from "@tripwire/db";
 
-// ─── Cache TTL ─────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const MIN_BATCH_SIZE = 20; // always fetch at least this many for cache warmth
 
-// ─── Public types ──────────────────────────────────────────────
 
 export type { CachedPR as GitHubPR, CachedRepo as GitHubRepoDetail };
 
@@ -44,7 +42,6 @@ export interface ActivityResult {
 	graphql: GitHubUserGraphQL | null;
 }
 
-// ─── Internal: cache helpers (lazy-load DB deps) ──────────────
 
 async function getDbDeps() {
 	const { eq, sql } = await import("drizzle-orm");
@@ -123,7 +120,6 @@ async function upsertCache(
 	}
 }
 
-// ─── Internal: transformers ────────────────────────────────────
 
 function transformSearchItemToPR(item: Record<string, unknown>): CachedPR {
 	const repoUrl = (item.repository_url as string) ?? "";
@@ -218,7 +214,6 @@ function transformRepoItem(item: Record<string, unknown>): CachedRepo {
 	};
 }
 
-// ─── Public API ────────────────────────────────────────────────
 
 /**
  * Fetch a user's pull requests with full details.
@@ -277,7 +272,6 @@ export async function fetchUserPRs(
 	return { items: enriched, totalCount };
 }
 
-// ─── Issue / PR comments ───────────────────────────────────────
 
 export interface CommentThreadResult {
 	comments: PRComment[];
@@ -347,7 +341,6 @@ export async function fetchComments(
 	return { comments: sorted.slice(0, limit), totalCount: sorted.length };
 }
 
-// ─── Single PR detail ──────────────────────────────────────────
 
 export interface PRComment {
 	id: number;

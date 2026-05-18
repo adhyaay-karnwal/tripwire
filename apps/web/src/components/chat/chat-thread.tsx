@@ -72,9 +72,9 @@ export function ChatThread(props: ChatThreadProps = {}) {
 
 	return (
 		<div className="flex flex-col gap-3 pt-1 pb-2">
-			{messages.map((msg) => (
+			{messages.map((msg, msgIdx) => (
 				<div
-					key={msg.id}
+					key={msg.id || `msg-${msgIdx}`}
 					className="transition-all duration-300 ease-out"
 				>
 					<ChatMessage
@@ -301,22 +301,22 @@ function ChatMessage({ message, showAvatar, onRespondToApproval }: ChatMessagePr
 					<>
 						{groupedParts
 							.filter((p) => !isToolPart(p as MessagePart) || (p as MessagePart & { state?: string }).state !== "approval-requested")
-							.map((part) => {
+							.map((part, i) => {
 								if (part.type === "grouped-results") {
 									return <CombinedActionResult key={part.key} results={part.results} />;
 								}
 								const mp = part as MessagePart;
-								return <MessagePartRenderer key={getPartKey(mp, message.id)} part={mp} onRespondToApproval={onRespondToApproval} />;
+								return <MessagePartRenderer key={getPartKey(mp, message.id, i)} part={mp} onRespondToApproval={onRespondToApproval} />;
 							})}
 						<BatchApprovalCard approvals={pendingApprovals} onApproveAll={handleApproveAll} onDenyAll={handleDenyAll} />
 					</>
 				) : (
-					groupedParts.map((part) => {
+					groupedParts.map((part, i) => {
 						if (part.type === "grouped-results") {
 							return <CombinedActionResult key={part.key} results={part.results} />;
 						}
 						const mp = part as MessagePart;
-						return <MessagePartRenderer key={getPartKey(mp, message.id)} part={mp} onRespondToApproval={onRespondToApproval} />;
+						return <MessagePartRenderer key={getPartKey(mp, message.id, i)} part={mp} onRespondToApproval={onRespondToApproval} />;
 					})
 				)}
 			</div>
