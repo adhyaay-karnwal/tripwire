@@ -20,6 +20,12 @@ import { useWorkspace } from "#/lib/workspace-context";
 import { useRouterState } from "@tanstack/react-router";
 import { useCustomer } from "autumn-js/react";
 import { useTRPC } from "#/integrations/trpc/react";
+import {
+	broadcastWorkflowMutation,
+	extractWorkflowIdsFromMessages,
+	broadcastRuleMutation,
+	extractRuleIdsFromMessages,
+} from "#/lib/workflow-events";
 
 
 interface ChatContextValue {
@@ -187,8 +193,9 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 				refetchCustomer();
 				return;
 			}
+			if (error.message.includes("Maximum update depth")) return;
 			console.error("[chat]", error.message);
-			setChatError(error);
+			setChatError((prev) => prev?.message === error.message ? prev : error);
 		},
 		onFinish: ({ messages }) => {
 			if (messages.length === 0) return;
@@ -200,6 +207,26 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 			});
 			queryClient.invalidateQueries({ queryKey: trpc.chats.list.queryKey() });
 			refetchCustomer();
+
+			const mutatedIds = extractWorkflowIdsFromMessages(messages);
+			for (const wfId of mutatedIds) {
+				broadcastWorkflowMutation(wfId);
+			}
+			if (mutatedIds.length > 0 && effectiveRepoId) {
+				queryClient.invalidateQueries({
+					queryKey: trpc.workflows.list.queryKey({ repoId: effectiveRepoId }),
+				});
+			}
+
+			const mutatedRuleIds = extractRuleIdsFromMessages(messages);
+			for (const ruleId of mutatedRuleIds) {
+				broadcastRuleMutation(ruleId);
+			}
+			if (mutatedRuleIds.length > 0 && effectiveRepoId) {
+				queryClient.invalidateQueries({
+					queryKey: trpc.customRules.list.queryKey({ repoId: effectiveRepoId }),
+				});
+			}
 		},
 	});
 	const isLoading = status === "submitted" || status === "streaming";

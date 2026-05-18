@@ -1,31 +1,4 @@
 
-export function AiSlopViz() {
-	// Stacked text lines, two highlighted as flagged with left accent bar
-	const lines = [
-		{ y: 8, w: 40, flagged: false },
-		{ y: 17, w: 34, flagged: false },
-		{ y: 26, w: 46, flagged: true },
-		{ y: 35, w: 30, flagged: false },
-		{ y: 44, w: 38, flagged: true },
-	];
-	return (
-		<svg width="110" height="86" viewBox="0 0 72 56" fill="none">
-			{lines.map((l, i) => (
-				<g key={i}>
-					<rect x="10" y={l.y} width={l.w} height="4" rx="2"
-						fill={l.flagged ? "rgba(52,166,255,0.12)" : "rgba(255,255,255,0.07)"} />
-					{l.flagged && (
-						<rect x="5" y={l.y} width="2" height="4" rx="1" fill="#34A6FF" opacity="0.5" />
-					)}
-				</g>
-			))}
-			{/* vertical scan line */}
-			<line x1="62" y1="4" x2="62" y2="52" stroke="rgba(52,166,255,0.12)" strokeWidth="1" strokeDasharray="2 3" />
-			<circle cx="62" cy="28" r="2" fill="#34A6FF" opacity="0.3" />
-		</svg>
-	);
-}
-
 export function ProfilePictureViz() {
 	// 2×3 avatar grid, properly centered badges
 	const S = 16;

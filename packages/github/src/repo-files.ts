@@ -71,10 +71,6 @@ export function generateRulesMd(config: RuleConfig, repoFullName: string): strin
 			`- **Language** — contributions not written in ${r.languageRequirement.language} are ${action(r.languageRequirement)}.`,
 		);
 	}
-	if (r.aiSlopDetection.enabled) {
-		any = true;
-		lines.push(`- **AI-generated content** — content matching known LLM patterns is ${action(r.aiSlopDetection)}.`);
-	}
 	if (r.cryptoAddressDetection.enabled) {
 		any = true;
 		lines.push(

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useFileTree, FileTree } from "@pierre/trees/react";
 import { parseAsStringEnum, useQueryState } from "nuqs";
 import { Button } from "#/components/ui/button";
@@ -316,6 +316,11 @@ function FileSettings({
 
 
 const FILE_KEYS = ["RULES.md", "PULL_REQUEST_TEMPLATE.md", "AGENTS.md"] as const;
+const FILE_TREE_PATHS = [
+	".github/RULES.md",
+	".github/PULL_REQUEST_TEMPLATE.md",
+	".github/AGENTS.md",
+];
 const FILE_TO_PATH: Record<FileKey, string> = {
 	"RULES.md": ".github/RULES.md",
 	"PULL_REQUEST_TEMPLATE.md": ".github/PULL_REQUEST_TEMPLATE.md",
@@ -329,14 +334,8 @@ export function RepoFilesTree(props: RepoFilesTreeProps) {
 	);
 	const [editorMode, setEditorMode] = useState<"preview" | "edit">("preview");
 
-	const paths = useMemo(() => [
-		".github/RULES.md",
-		".github/PULL_REQUEST_TEMPLATE.md",
-		".github/AGENTS.md",
-	], []);
-
 	const { model } = useFileTree({
-		paths,
+		paths: FILE_TREE_PATHS,
 		icons: "complete",
 		initialExpansion: "open",
 		initialSelectedPaths: [FILE_TO_PATH[activeFile]],
@@ -360,16 +359,13 @@ export function RepoFilesTree(props: RepoFilesTreeProps) {
 		return getFileContent(activeFile, props);
 	}, [activeFile, props]);
 
-	const handleContentChange = useCallback(
-		(next: string) => {
-			if (!activeFile || !fileContent) return;
-			props.onUpdateContent(
-				getContentKind(activeFile),
-				next === fileContent.generated ? "" : next,
-			);
-		},
-		[activeFile, fileContent, props],
-	);
+	const handleContentChange = (next: string) => {
+		if (!activeFile || !fileContent) return;
+		props.onUpdateContent(
+			getContentKind(activeFile),
+			next === fileContent.generated ? "" : next,
+		);
+	};
 
 	return (
 		<div className="flex flex-col gap-3">

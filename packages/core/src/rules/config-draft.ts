@@ -46,8 +46,7 @@ const ACTION_LABELS: Record<RuleAction, string> = {
 };
 
 const FIELD_ORDER: Record<RuleKey, string[]> = {
-	aiSlopDetection: ["enabled", "action", "thresholdCount"],
-languageRequirement: ["enabled", "action", "language", "thresholdCount"],
+	languageRequirement: ["enabled", "action", "language", "thresholdCount"],
 	minMergedPrs: ["enabled", "action", "count", "thresholdCount"],
 	accountAge: ["enabled", "action", "days", "thresholdCount"],
 	maxPrsPerDay: ["enabled", "action", "limit", "thresholdCount"],
@@ -190,8 +189,7 @@ function buildChange(ruleKey: RuleKey, field: string, previousValue: unknown, ne
 
 export function normalizeRuleConfig(raw?: Partial<RuleConfig>): RuleConfig {
 	return {
-		aiSlopDetection: { ...DEFAULT_RULE_CONFIG.aiSlopDetection, ...raw?.aiSlopDetection },
-languageRequirement: { ...DEFAULT_RULE_CONFIG.languageRequirement, ...raw?.languageRequirement },
+		languageRequirement: { ...DEFAULT_RULE_CONFIG.languageRequirement, ...raw?.languageRequirement },
 		minMergedPrs: { ...DEFAULT_RULE_CONFIG.minMergedPrs, ...raw?.minMergedPrs },
 		accountAge: { ...DEFAULT_RULE_CONFIG.accountAge, ...raw?.accountAge },
 		maxPrsPerDay: { ...DEFAULT_RULE_CONFIG.maxPrsPerDay, ...raw?.maxPrsPerDay },

@@ -1,10 +1,10 @@
 /**
  * Comprehensive rule evaluation tests.
  *
- * Tests every one of the 11 rules in the filter pipeline by exercising the
+ * Tests every one of the rules in the filter pipeline by exercising the
  * exact detection functions and evaluation logic the pipeline uses.
  *
- * Since the detection functions (detectAiSlop, detectCryptoAddress, etc.) are
+ * Since the detection functions (detectCryptoAddress, etc.) are
  * private to filter-pipeline.ts, we test them indirectly through the language
  * detection (exported) and by importing and testing the patterns directly via
  * regex matching — same patterns the pipeline uses.
@@ -12,30 +12,6 @@
 
 import { describe, it, expect } from "vitest";
 import { detectLanguageScript, cleanForLanguageDetection } from "./language-detection";
-
-// ─── AI Slop Patterns (exact copy from filter-pipeline.ts) ─────
-
-const AI_SLOP_PATTERNS = [
-	/as an ai language model/i,
-	/as a large language model/i,
-	/i cannot and will not/i,
-	/i'm an ai assistant/i,
-	/certainly! here(?:'s| is)/i,
-	/i'd be happy to help/i,
-	/great question!/i,
-	/\bdelve\b.*\bintricacies\b/i,
-	/\beverchanging\b/i,
-	/\btapestry\b.*\b(?:innovation|landscape)\b/i,
-	/(?:it's worth noting|it is worth noting) that/i,
-	/(?:in today's|in the) (?:rapidly )?(?:evolving|changing) (?:landscape|world)/i,
-];
-
-function detectAiSlop(text: string): string | null {
-	for (const pattern of AI_SLOP_PATTERNS) {
-		if (pattern.test(text)) return `matched: ${pattern.source}`;
-	}
-	return null;
-}
 
 // ─── Crypto Patterns (exact copy from filter-pipeline.ts) ──────
 
@@ -195,72 +171,7 @@ describe("languageRequirement", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// RULE 4: aiSlopDetection
-// ═══════════════════════════════════════════════════════════════
-
-describe("aiSlopDetection", () => {
-	it("detects 'as an AI language model'", () => {
-		expect(detectAiSlop("As an AI language model, I cannot help with that.")).not.toBeNull();
-	});
-
-	it("detects 'as a large language model'", () => {
-		expect(detectAiSlop("As a large language model, I need to clarify.")).not.toBeNull();
-	});
-
-	it("detects 'I cannot and will not'", () => {
-		expect(detectAiSlop("I cannot and will not provide that information.")).not.toBeNull();
-	});
-
-	it("detects 'I'm an AI assistant'", () => {
-		expect(detectAiSlop("I'm an AI assistant and can help with this.")).not.toBeNull();
-	});
-
-	it("detects 'Certainly! Here's'", () => {
-		expect(detectAiSlop("Certainly! Here's the implementation you requested.")).not.toBeNull();
-	});
-
-	it("detects 'I'd be happy to help'", () => {
-		expect(detectAiSlop("I'd be happy to help you with that problem.")).not.toBeNull();
-	});
-
-	it("detects 'Great question!'", () => {
-		expect(detectAiSlop("Great question! Let me explain how this works.")).not.toBeNull();
-	});
-
-	it("detects 'delve...intricacies'", () => {
-		expect(detectAiSlop("Let me delve into the intricacies of this architecture.")).not.toBeNull();
-	});
-
-	it("detects 'everchanging'", () => {
-		expect(detectAiSlop("In this everchanging technological landscape.")).not.toBeNull();
-	});
-
-	it("detects 'tapestry...innovation'", () => {
-		expect(detectAiSlop("A rich tapestry of innovation and progress.")).not.toBeNull();
-	});
-
-	it("detects 'it's worth noting that'", () => {
-		expect(detectAiSlop("It's worth noting that this approach has trade-offs.")).not.toBeNull();
-	});
-
-	it("detects 'in today's evolving landscape'", () => {
-		expect(detectAiSlop("In today's rapidly evolving landscape of technology.")).not.toBeNull();
-	});
-
-	it("does NOT flag normal human text", () => {
-		expect(detectAiSlop("Fixed the off-by-one error in the pagination logic.")).toBeNull();
-		expect(detectAiSlop("This PR adds retry logic for transient network failures.")).toBeNull();
-		expect(detectAiSlop("Refactored the auth module to use OAuth2 instead of API keys.")).toBeNull();
-	});
-
-	it("does NOT flag short technical descriptions", () => {
-		expect(detectAiSlop("bump version")).toBeNull();
-		expect(detectAiSlop("fix: resolve race condition in queue consumer")).toBeNull();
-	});
-});
-
-// ═══════════════════════════════════════════════════════════════
-// RULE 5: maxPrsPerDay
+// RULE 4: maxPrsPerDay
 // ═══════════════════════════════════════════════════════════════
 
 describe("maxPrsPerDay", () => {

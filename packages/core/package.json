@@ -10,7 +10,9 @@
 		"./contributor-score": "./src/contributor-score.ts",
 		"./filter-pipeline": "./src/filter-pipeline.ts",
 		"./rules/config-schema": "./src/rules/config-schema.ts",
-		"./rules/config-draft": "./src/rules/config-draft.ts"
+		"./rules/config-draft": "./src/rules/config-draft.ts",
+		"./rules/signal-registry": "./src/rules/signal-registry.ts",
+		"./workflow-registry": "./src/workflow-registry.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

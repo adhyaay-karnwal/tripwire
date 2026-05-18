@@ -12,6 +12,13 @@ export const ai_credits = feature({
 	consumable: true,
 });
 
+export const custom_rules = feature({
+	id: 'custom_rules',
+	name: 'Custom Rules',
+	type: 'metered',
+	consumable: false,
+});
+
 // ─── Plans ──────────────────────────────────────────────────
 
 // Free: 100¢ = $1.00 of AI spend/month
@@ -29,6 +36,7 @@ export const free = plan({
 				interval: 'month',
 			},
 		}),
+		item({ featureId: custom_rules.id, included: 2 }),
 	],
 });
 
@@ -47,6 +55,7 @@ export const pro = plan({
 				interval: 'month',
 			},
 		}),
+		item({ featureId: custom_rules.id, included: 10 }),
 	],
 });
 

@@ -76,6 +76,10 @@ function AutomationEditorPage() {
 	const wf = wfQuery.data;
 	const def = wf.definition as { nodes: Node[]; edges: Edge[] };
 
+	const handleRemoteUpdate = () => {
+		wfQuery.refetch();
+	};
+
 	return (
 		<div className="h-full flex flex-col">
 			<div className="flex items-center gap-3 px-4 py-3 border-b border-tw-border shrink-0">
@@ -102,10 +106,13 @@ function AutomationEditorPage() {
 			</div>
 			<div className="flex-1 min-h-0">
 				<WorkflowEditor
+					key={wfQuery.dataUpdatedAt}
 					initialNodes={def.nodes as Node[]}
 					initialEdges={def.edges as Edge[]}
 					onSave={handleSave}
 					repoId={repo?.id}
+					workflowId={automationId}
+					onRemoteUpdate={handleRemoteUpdate}
 				/>
 			</div>
 		</div>

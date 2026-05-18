@@ -68,16 +68,6 @@ export function TopNav({ askOpen, onToggleAsk }: TopNavProps) {
 		staleTime: 60_000,
 	});
 
-	// Fetch slop blocked count for insights badge
-	const slopBlockedQuery = useQuery({
-		...trpc.events.slopBlocked.queryOptions({
-			repoId: repo?.id ?? "",
-			days: 30,
-		}),
-		enabled: !!repo?.id,
-		staleTime: 60_000,
-	});
-
 	// Only show blocked + near misses in badge (actionable items)
 	const eventsBadge = countsQuery.data
 		? (countsQuery.data.pipeline_blocked || 0) + (countsQuery.data.rule_near_miss || 0)
@@ -88,7 +78,6 @@ export function TopNav({ askOpen, onToggleAsk }: TopNavProps) {
 	const getBadge = (item: NavItem): number | undefined => {
 		if (item.badgeKey === "events") return eventsBadge;
 		if (item.badgeKey === "rules") return rulesCountQuery.data?.enabled;
-		if (item.badgeKey === "insights") return slopBlockedQuery.data?.count;
 		return undefined;
 	};
 

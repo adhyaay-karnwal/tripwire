@@ -28,7 +28,7 @@ Clone:
 ```bash
 git clone https://github.com/bountydotnew/tripwire.git
 cd tripwire
-bun install
+pnpm install
 ```
 
 Copy the example env file and fill it in:
@@ -56,24 +56,24 @@ Optional:
 Push tables to db:
 
 ```bash
-bun run db:push
+pnpm db:push
 ```
 
 Start the dev server:
 
 ```bash
-bun run dev
+pnpm dev
 ```
 
 Open http://localhost:3000.
 
 ## Scripts
 
-- `bun dev` — run the app
-- `bun build` — build for production
-- `bun test` — run tests
-- `bun typecheck` — typecheck
-- `bun db:studio` — open Drizzle Studio
+- `pnpm dev` — run the app
+- `pnpm build` — build for production
+- `pnpm test` — run tests
+- `pnpm typecheck` — typecheck
+- `pnpm db:studio` — open Drizzle Studio
 
 ## License
 

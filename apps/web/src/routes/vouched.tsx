@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { authClient } from "@tripwire/auth/client";
@@ -197,14 +197,14 @@ function ApplyButton() {
 		}),
 	);
 
-	const canSubmit = useMemo(() => reason.trim().length >= 10 && !submit.isPending, [reason, submit.isPending]);
+	const canSubmit = reason.trim().length >= 10 && !submit.isPending;
 
-	const handleLogin = useCallback(async () => {
+	const handleLogin = async () => {
 		await authClient.signIn.social({
 			provider: "github",
 			callbackURL: typeof window !== "undefined" ? window.location.href : "/vouched",
 		});
-	}, []);
+	};
 
 	return (
 		<>

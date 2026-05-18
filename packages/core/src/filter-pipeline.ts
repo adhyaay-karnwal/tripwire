@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql, asc } from "drizzle-orm";
 import { db } from "@tripwire/db/client";
 import {
 	repositories,
@@ -7,6 +7,7 @@ import {
 	whitelistEntries,
 	blacklistEntries,
 	globalVouches,
+	customRules,
 	DEFAULT_RULE_CONFIG,
 	type RuleConfig,
 	type RuleAction,
@@ -28,6 +29,8 @@ import {
 } from "@tripwire/github";
 import { env } from "@tripwire/env/server";
 import { logEvent, logEvents } from "./events";
+import { evaluateCustomRule } from "./rules/custom-rule-evaluator";
+import { resolveSignals } from "./rules/signal-resolver";
 
 const APP_BASE_URL = env.BETTER_AUTH_URL ?? "";
 
@@ -330,30 +333,6 @@ function isLikelyLanguage(text: string, language: string): boolean {
 	return detection.dominant === expected && detection.confidence > 0.3;
 }
 
-const AI_SLOP_PATTERNS = [
-	/as an ai language model/i,
-	/as a large language model/i,
-	/i cannot and will not/i,
-	/i'm an ai assistant/i,
-	/certainly! here(?:'s| is)/i,
-	/i'd be happy to help/i,
-	/great question!/i,
-	/\bdelve\b.*\bintricacies\b/i,
-	/\beverchanging\b/i,
-	/\btapestry\b.*\b(?:innovation|landscape)\b/i,
-	/(?:it's worth noting|it is worth noting) that/i,
-	/(?:in today's|in the) (?:rapidly )?(?:evolving|changing) (?:landscape|world)/i,
-];
-
-function detectAiSlop(text: string): string | null {
-	for (const pattern of AI_SLOP_PATTERNS) {
-		if (pattern.test(text)) {
-			return `matched pattern: ${pattern.source}`;
-		}
-	}
-	return null;
-}
-
 // ─── Crypto address detection ──────────────────────────────────
 
 const CRYPTO_PATTERNS: { name: string; pattern: RegExp }[] = [
@@ -503,7 +482,6 @@ export async function runFilterPipeline(
 
 	const rawConfig = configRow?.config;
 	const config: RuleConfig = {
-		aiSlopDetection: { ...DEFAULT_RULE_CONFIG.aiSlopDetection, ...rawConfig?.aiSlopDetection },
 		languageRequirement: { ...DEFAULT_RULE_CONFIG.languageRequirement, ...rawConfig?.languageRequirement },
 		minMergedPrs: { ...DEFAULT_RULE_CONFIG.minMergedPrs, ...rawConfig?.minMergedPrs },
 		accountAge: { ...DEFAULT_RULE_CONFIG.accountAge, ...rawConfig?.accountAge },
@@ -824,32 +802,6 @@ export async function runFilterPipeline(
 		}
 	}
 
-	// ─── aiSlopDetection ───────────────────────────────────────
-	if (ruleApplies(config.aiSlopDetection, contentType, scope) && contentText) {
-		rulesChecked++;
-		const slopMatch = detectAiSlop(contentText);
-		const blocked = slopMatch !== null;
-
-		const eval_: RuleEvaluation = {
-			rule: "aiSlopDetection",
-			passed: !blocked,
-			nearMiss: false, // binary check
-			reason: blocked
-				? `Content from @${ctx.senderLogin} was flagged as AI-generated: ${slopMatch}`
-				: undefined,
-		};
-		evaluations.push(eval_);
-
-		if (blocked) {
-			await recordViolation(
-				eval_.rule,
-				eval_.reason!,
-				config.aiSlopDetection.action,
-				config.aiSlopDetection.thresholdCount,
-			);
-		}
-	}
-
 	// ─── maxPrsPerDay ──────────────────────────────────────────
 	if (ruleApplies(config.maxPrsPerDay, contentType, scope)) {
 		rulesChecked++;
@@ -1047,7 +999,63 @@ export async function runFilterPipeline(
 		}
 	}
 
-	// ─── Result ────────────────────────────────────────────────
+	const enabledCustomRules = await db
+		.select()
+		.from(customRules)
+		.where(and(eq(customRules.repoId, repo.id), eq(customRules.enabled, true)))
+		.orderBy(asc(customRules.priority));
+
+	if (enabledCustomRules.length > 0) {
+		if (!ghUser) {
+			try {
+				ghUser = await getUser(token, ctx.senderLogin);
+			} catch {
+				// If we can't fetch user info, proceed with null
+			}
+		}
+
+		const signals = resolveSignals(
+			{ senderLogin: ctx.senderLogin, senderId: ctx.senderId, prNumber: ctx.prNumber },
+			ghUser,
+			contentText,
+			null,
+		);
+
+		for (const customRule of enabledCustomRules) {
+			const ruleConfig = {
+				enabled: true,
+				scopeOverride: customRule.scopeOverride ?? undefined,
+			};
+
+			if (!ruleApplies(ruleConfig, contentType, scope)) continue;
+
+			rulesChecked++;
+			const result = evaluateCustomRule(customRule.definition, signals);
+			const ruleName = `custom:${customRule.name}`;
+
+			const eval_: RuleEvaluation = {
+				rule: ruleName,
+				passed: result.passed,
+				nearMiss: result.nearMiss,
+				action: customRule.action as RuleAction,
+				reason: !result.passed
+					? `Custom rule "${customRule.name}" failed for @${ctx.senderLogin}.`
+					: undefined,
+			};
+			evaluations.push(eval_);
+
+			if (!result.passed) {
+				await recordViolation(
+					ruleName,
+					eval_.reason!,
+					customRule.action as RuleAction,
+					customRule.thresholdCount ?? undefined,
+				);
+			}
+		}
+	}
+
+	// Result
 	if (firstViolation) {
 		const v = firstViolation as Violation;
 		return {

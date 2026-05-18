@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { authClient } from "@tripwire/auth/client";
-import { createFileRoute, useBlocker } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useBlocker, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseAsBoolean, parseAsString, parseAsStringEnum, useQueryState, useQueryStates } from "nuqs";
 import {
 	AccountAgeViz,
-	AiSlopViz,
 	CryptoViz,
 	LanguageViz,
 	MaxFilesChangedViz,
@@ -52,9 +51,47 @@ import {
 	generateAgentsMd,
 } from "@tripwire/github/repo-files";
 import { useWorkspace } from "#/lib/workspace-context";
-import { useNavigate } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/_app/$orgHandle/rules")({
+function tabFromLocationSearch(search: unknown): string | null {
+	if (search == null) return null;
+	if (typeof search === "string") {
+		const s = search.startsWith("?") ? search.slice(1) : search;
+		return new URLSearchParams(s).get("tab");
+	}
+	if (typeof search === "object" && "tab" in (search as object)) {
+		const v = (search as { tab?: unknown }).tab;
+		return typeof v === "string" ? v : null;
+	}
+	return null;
+}
+
+export const Route = createFileRoute("/_app/$orgHandle/rules/")({
+	beforeLoad: ({ location, params }) => {
+		const orgHandle = params.orgHandle as string;
+		if (tabFromLocationSearch(location.search) === "custom") {
+			let sp: URLSearchParams;
+			if (typeof location.search === "string") {
+				const s = location.search.startsWith("?")
+					? location.search.slice(1)
+					: location.search;
+				sp = new URLSearchParams(s);
+			} else if (location.search && typeof location.search === "object") {
+				sp = new URLSearchParams(
+					Object.entries(location.search as Record<string, string>)
+						.filter(([, v]) => v !== undefined && v !== "")
+						.map(([k, v]) => [k, String(v)]),
+				);
+			} else {
+				sp = new URLSearchParams();
+			}
+			sp.delete("tab");
+			const rest = sp.toString();
+			throw redirect({
+				href: `/${orgHandle}/rules/custom${rest ? `?${rest}` : ""}`,
+				replace: true,
+			});
+		}
+	},
 	component: RulesPage,
 	pendingComponent: RulesPageSkeleton,
 });
@@ -80,12 +117,14 @@ function RulesPageSkeleton() {
 }
 
 function RulesPage() {
+	const { orgHandle } = Route.useParams();
 	const { repo, repos, isLoading } = useWorkspace();
 	const { data: session } = authClient.useSession();
 	const isAdmin = session?.user?.role === "admin";
 	const repoId = repo?.id;
 	const trpc = useTRPC();
 	const githubAppSlug = env.VITE_GITHUB_APP_SLUG ?? "tripwire-app";
+	const customHubPath: string = `/${orgHandle}/rules/custom`;
 	const queryClient = useQueryClient();
 	const [draftConfig, setDraftConfig] = useState<RuleConfig | null>(null);
 	const [showSavedState, setShowSavedState] = useState(false);
@@ -99,10 +138,7 @@ function RulesPage() {
 		),
 	);
 
-	const serverConfig = useMemo(
-		() => normalizeRuleConfig(configQuery.data),
-		[configQuery.data],
-	);
+	const serverConfig = normalizeRuleConfig(configQuery.data);
 	const activeConfig = draftConfig ?? serverConfig;
 	const changes = getRuleConfigChanges(serverConfig, activeConfig);
 	const dirty = changes.length > 0;
@@ -117,12 +153,6 @@ function RulesPage() {
 		setDraftConfig(null);
 		setShowSavedState(false);
 	}, [repoId]);
-
-	useEffect(() => {
-		if (dirty) {
-			setShowSavedState(false);
-		}
-	}, [dirty]);
 
 	useEffect(() => {
 		if (draftConfig && areRuleConfigsEqual(draftConfig, serverConfig)) {
@@ -146,7 +176,7 @@ function RulesPage() {
 		disabled: !dirty,
 	});
 
-	const toggleRule = useCallback(<K extends keyof RuleConfig>(key: K, enabled: boolean) => {
+	const toggleRule = <K extends keyof RuleConfig>(key: K, enabled: boolean) => {
 		if (updateConfig.isPending) return;
 
 		setDraftConfig((currentDraft) => {
@@ -158,9 +188,9 @@ function RulesPage() {
 					: { ...serverConfig[key], enabled: false },
 			});
 		});
-	}, [serverConfig, updateConfig.isPending]);
+	};
 
-	const updateRuleValue = useCallback(<K extends keyof RuleConfig>(
+	const updateRuleValue = <K extends keyof RuleConfig>(
 		key: K,
 		patch: Partial<RuleConfig[K]>,
 	) => {
@@ -173,35 +203,32 @@ function RulesPage() {
 				[key]: { ...baseConfig[key], ...patch },
 			});
 		});
-	}, [serverConfig, updateConfig.isPending]);
+	};
 
-	const updateRepoFileContent = useCallback(
-		(kind: "rules-md" | "pr-template" | "agents-md", content: string) => {
-			if (updateConfig.isPending) return;
-			setDraftConfig((currentDraft) => {
-				const baseConfig = currentDraft ?? serverConfig;
-				const repoFiles =
-					kind === "rules-md"
+	const updateRepoFileContent = (kind: "rules-md" | "pr-template" | "agents-md", content: string) => {
+		if (updateConfig.isPending) return;
+		setDraftConfig((currentDraft) => {
+			const baseConfig = currentDraft ?? serverConfig;
+			const repoFiles =
+				kind === "rules-md"
+					? {
+							...baseConfig.repoFiles,
+							rulesMd: { ...baseConfig.repoFiles.rulesMd, customContent: content },
+						}
+					: kind === "agents-md"
 						? {
 								...baseConfig.repoFiles,
-								rulesMd: { ...baseConfig.repoFiles.rulesMd, customContent: content },
+								agentsMd: { ...baseConfig.repoFiles.agentsMd, customContent: content },
 							}
-						: kind === "agents-md"
-							? {
-									...baseConfig.repoFiles,
-									agentsMd: { ...baseConfig.repoFiles.agentsMd, customContent: content },
-								}
-							: {
-									...baseConfig.repoFiles,
-									prTemplate: { ...baseConfig.repoFiles.prTemplate, customContent: content },
-								};
-				return normalizeRuleConfig({ ...baseConfig, repoFiles });
-			});
-		},
-		[serverConfig, updateConfig.isPending],
-	);
+						: {
+								...baseConfig.repoFiles,
+								prTemplate: { ...baseConfig.repoFiles.prTemplate, customContent: content },
+							};
+			return normalizeRuleConfig({ ...baseConfig, repoFiles });
+		});
+	};
 
-	const toggleScope = useCallback((field: "pullRequests" | "issues" | "comments", value: boolean) => {
+	const toggleScope = (field: "pullRequests" | "issues" | "comments", value: boolean) => {
 		if (updateConfig.isPending) return;
 		setDraftConfig((currentDraft) => {
 			const baseConfig = currentDraft ?? serverConfig;
@@ -210,9 +237,9 @@ function RulesPage() {
 				contentScope: { ...baseConfig.contentScope, [field]: value },
 			});
 		});
-	}, [serverConfig, updateConfig.isPending]);
+	};
 
-	const handleSave = useCallback(async () => {
+	const handleSave = async () => {
 		if (!repoId || !dirty) return;
 
 		try {
@@ -224,22 +251,22 @@ function RulesPage() {
 		} catch {
 			// Error state is surfaced via the mutation toast.
 		}
-	}, [activeConfig, configQueryKey, dirty, queryClient, repoId, updateConfig]);
+	};
 
-	const handleDiscard = useCallback(() => {
+	const handleDiscard = () => {
 		if (updateConfig.isPending) return;
 		setDraftConfig(null);
 		setShowSavedState(false);
-	}, [updateConfig.isPending]);
+	};
 
-	const handleRevert = useCallback((changeId: string) => {
+	const handleRevert = (changeId: string) => {
 		if (updateConfig.isPending) return;
 
 		setDraftConfig((currentDraft) => {
 			const baseConfig = currentDraft ?? serverConfig;
 			return revertRuleConfigChange(serverConfig, baseConfig, changeId);
 		});
-	}, [serverConfig, updateConfig.isPending]);
+	};
 
 	const whitelistQuery = useQuery(
 		trpc.whitelist.list.queryOptions(
@@ -297,12 +324,6 @@ function RulesPage() {
 		}),
 	);
 
-	const suggestedQuery = useQuery({
-		...trpc.whitelist.suggestedContributors.queryOptions({ repoId: repoId! }),
-		enabled: !!repoId,
-		staleTime: 5 * 60 * 1000,
-	});
-
 	const [tab, setTab] = useQueryState(
 		"tab",
 		parseAsStringEnum([
@@ -314,6 +335,16 @@ function RulesPage() {
 			"workflows",
 		] as const).withDefault("marketplace"),
 	);
+
+	const pathname = useRouterState({ select: (s) => s.location.pathname });
+	const onCustomHub = pathname.includes(`/${orgHandle}/rules/custom`);
+
+	const suggestedQuery = useQuery({
+		...trpc.whitelist.suggestedContributors.queryOptions({ repoId: repoId! }),
+		enabled: !!repoId && tab === "people",
+		staleTime: 5 * 60 * 1000,
+	});
+
 	const [searchQuery, setSearchQuery] = useState("");
 
 	// Clear the file param when navigating away from the files tab
@@ -329,35 +360,32 @@ function RulesPage() {
 		configure: parseAsBoolean.withDefault(false),
 	});
 
-	const ruleConfigureProps = useCallback(
-		(key: keyof RuleConfig) => {
-			const rule = activeConfig[key];
-			const scopeOverride =
-				rule && typeof rule === "object" && "scopeOverride" in rule
-					? (rule.scopeOverride as
-							| { pullRequests?: boolean; issues?: boolean; comments?: boolean }
-							| undefined)
-					: undefined;
-			return {
-				configureOpen: configureFlag && configureRule === key,
-				onConfigureOpenChange: (open: boolean) =>
-					setConfigureParams(open ? { rule: key, configure: true } : { rule: null, configure: false }),
-				globalScope: activeConfig.contentScope,
-				scopeOverride,
-				onScopeOverrideChange: (
-					next:
+	const ruleConfigureProps = (key: keyof RuleConfig) => {
+		const rule = activeConfig[key];
+		const scopeOverride =
+			rule && typeof rule === "object" && "scopeOverride" in rule
+				? (rule.scopeOverride as
 						| { pullRequests?: boolean; issues?: boolean; comments?: boolean }
-						| undefined,
-				) => updateRuleValue(key, { scopeOverride: next } as never),
-			};
-		},
-		[activeConfig, configureFlag, configureRule, setConfigureParams, updateRuleValue],
-	);
+						| undefined)
+				: undefined;
+		return {
+			configureOpen: configureFlag && configureRule === key,
+			onConfigureOpenChange: (open: boolean) =>
+				setConfigureParams(open ? { rule: key, configure: true } : { rule: null, configure: false }),
+			globalScope: activeConfig.contentScope,
+			scopeOverride,
+			onScopeOverrideChange: (
+				next:
+					| { pullRequests?: boolean; issues?: boolean; comments?: boolean }
+					| undefined,
+			) => updateRuleValue(key, { scopeOverride: next } as never),
+		};
+	};
 
 	const requestsQuery = useQuery(
 		trpc.requests.list.queryOptions(
 			{ repoId: repoId!, status: "pending" },
-			{ enabled: !!repoId, staleTime: 30 * 1000 },
+			{ enabled: !!repoId, staleTime: 90 * 1000 },
 		),
 	);
 	const pendingRequestCount = requestsQuery.data?.length ?? 0;
@@ -365,10 +393,18 @@ function RulesPage() {
 	const vouchRequestsQuery = useQuery(
 		trpc.vouches.listRequests.queryOptions(
 			{ status: "pending" },
-			{ staleTime: 30 * 1000 },
+			{ staleTime: 90 * 1000 },
 		),
 	);
 	const pendingVouchCount = vouchRequestsQuery.data?.length ?? 0;
+
+	const customRulesQuery = useQuery(
+		trpc.customRules.list.queryOptions(
+			{ repoId: repoId! },
+			{ enabled: !!repoId, staleTime: 30 * 1000 },
+		),
+	);
+	const customRuleCount = customRulesQuery.data?.length ?? 0;
 
 	const decideVouchRequest = useMutation(
 		trpc.vouches.decideRequest.mutationOptions({
@@ -379,84 +415,75 @@ function RulesPage() {
 		}),
 	);
 
-	const addHoneypotPhrase = useCallback(
-		(target: "prTemplate" | "agentsMd", kind: "codeword" | "marker" | "natural" | "tag") => {
-			if (updateConfig.isPending) return;
-			const newPhrase = generateHoneypotPhraseOfKind(kind);
-			setDraftConfig((currentDraft) => {
-				const baseConfig = currentDraft ?? serverConfig;
-				return normalizeRuleConfig({
-					...baseConfig,
-					repoFiles: {
-						...baseConfig.repoFiles,
-						[target]: {
-							...baseConfig.repoFiles[target],
-							honeypotPhrases: [
-								...baseConfig.repoFiles[target].honeypotPhrases,
-								newPhrase,
-							],
-							customContent: "",
-						},
+	const addHoneypotPhrase = (target: "prTemplate" | "agentsMd", kind: "codeword" | "marker" | "natural" | "tag") => {
+		if (updateConfig.isPending) return;
+		const newPhrase = generateHoneypotPhraseOfKind(kind);
+		setDraftConfig((currentDraft) => {
+			const baseConfig = currentDraft ?? serverConfig;
+			return normalizeRuleConfig({
+				...baseConfig,
+				repoFiles: {
+					...baseConfig.repoFiles,
+					[target]: {
+						...baseConfig.repoFiles[target],
+						honeypotPhrases: [
+							...baseConfig.repoFiles[target].honeypotPhrases,
+							newPhrase,
+						],
+						customContent: "",
 					},
-				});
+				},
 			});
-		},
-		[serverConfig, updateConfig.isPending],
-	);
+		});
+	};
 
-	const removeHoneypotPhrase = useCallback(
-		(target: "prTemplate" | "agentsMd", index: number) => {
-			if (updateConfig.isPending) return;
-			setDraftConfig((currentDraft) => {
-				const baseConfig = currentDraft ?? serverConfig;
-				return normalizeRuleConfig({
-					...baseConfig,
-					repoFiles: {
-						...baseConfig.repoFiles,
-						[target]: {
-							...baseConfig.repoFiles[target],
-							honeypotPhrases: baseConfig.repoFiles[target].honeypotPhrases.filter(
-								(_, i) => i !== index,
-							),
-						},
+	const removeHoneypotPhrase = (target: "prTemplate" | "agentsMd", index: number) => {
+		if (updateConfig.isPending) return;
+		setDraftConfig((currentDraft) => {
+			const baseConfig = currentDraft ?? serverConfig;
+			return normalizeRuleConfig({
+				...baseConfig,
+				repoFiles: {
+					...baseConfig.repoFiles,
+					[target]: {
+						...baseConfig.repoFiles[target],
+						honeypotPhrases: baseConfig.repoFiles[target].honeypotPhrases.filter(
+							(_, i) => i !== index,
+						),
 					},
-				});
+				},
 			});
-		},
-		[serverConfig, updateConfig.isPending],
-	);
+		});
+	};
 
-	const toggleRepoFile = useCallback(
-		(path: string, value: boolean) => {
-			if (updateConfig.isPending) return;
-			setDraftConfig((currentDraft) => {
-				const baseConfig = currentDraft ?? serverConfig;
-				const repoFiles = baseConfig.repoFiles;
-				let nextRepoFiles;
-				switch (path) {
-					case "rulesMd.autoSync":
-						nextRepoFiles = { ...repoFiles, rulesMd: { ...repoFiles.rulesMd, autoSync: value } };
-						break;
-					case "prTemplate.autoSync":
-						nextRepoFiles = { ...repoFiles, prTemplate: { ...repoFiles.prTemplate, autoSync: value } };
-						break;
-					case "prTemplate.honeypotEnabled":
-						nextRepoFiles = { ...repoFiles, prTemplate: { ...repoFiles.prTemplate, honeypotEnabled: value } };
-						break;
-					case "agentsMd.autoSync":
-						nextRepoFiles = { ...repoFiles, agentsMd: { ...repoFiles.agentsMd, autoSync: value } };
-						break;
-					case "agentsMd.honeypotEnabled":
-						nextRepoFiles = { ...repoFiles, agentsMd: { ...repoFiles.agentsMd, honeypotEnabled: value } };
-						break;
-					default:
-						nextRepoFiles = repoFiles;
-				}
-				return normalizeRuleConfig({ ...baseConfig, repoFiles: nextRepoFiles });
-			});
-		},
-		[serverConfig, updateConfig.isPending],
-	);
+	const toggleRepoFile = (path: string, value: boolean) => {
+		if (updateConfig.isPending) return;
+		setDraftConfig((currentDraft) => {
+			const baseConfig = currentDraft ?? serverConfig;
+			const repoFiles = baseConfig.repoFiles;
+			let nextRepoFiles;
+			switch (path) {
+				case "rulesMd.autoSync":
+					nextRepoFiles = { ...repoFiles, rulesMd: { ...repoFiles.rulesMd, autoSync: value } };
+					break;
+				case "prTemplate.autoSync":
+					nextRepoFiles = { ...repoFiles, prTemplate: { ...repoFiles.prTemplate, autoSync: value } };
+					break;
+				case "prTemplate.honeypotEnabled":
+					nextRepoFiles = { ...repoFiles, prTemplate: { ...repoFiles.prTemplate, honeypotEnabled: value } };
+					break;
+				case "agentsMd.autoSync":
+					nextRepoFiles = { ...repoFiles, agentsMd: { ...repoFiles.agentsMd, autoSync: value } };
+					break;
+				case "agentsMd.honeypotEnabled":
+					nextRepoFiles = { ...repoFiles, agentsMd: { ...repoFiles.agentsMd, honeypotEnabled: value } };
+					break;
+				default:
+					nextRepoFiles = repoFiles;
+			}
+			return normalizeRuleConfig({ ...baseConfig, repoFiles: nextRepoFiles });
+		});
+	};
 
 	const decideRequest = useMutation(
 		trpc.requests.decide.mutationOptions({
@@ -480,7 +507,6 @@ function RulesPage() {
 	);
 
 	const activeCount = [
-		activeConfig.aiSlopDetection.enabled,
 		activeConfig.languageRequirement.enabled,
 		activeConfig.minMergedPrs.enabled,
 		activeConfig.accountAge.enabled,
@@ -514,8 +540,7 @@ function RulesPage() {
 
 	// Build rule list for filtering
 	const allRules = [
-		{ key: "aiSlopDetection" as const, title: "AI slop detection", searchable: "ai slop detection automated" },
-{ key: "languageRequirement" as const, title: "Language requirement", searchable: "language requirement english" },
+		{ key: "languageRequirement" as const, title: "Language requirement", searchable: "language requirement english" },
 		{ key: "minMergedPrs" as const, title: "Minimum merged PRs", searchable: "minimum merged prs pull requests" },
 		{ key: "accountAge" as const, title: "Account age", searchable: "account age days old new" },
 		{ key: "maxPrsPerDay" as const, title: "Max PRs per day", searchable: "max prs per day rate limit" },
@@ -595,6 +620,18 @@ function RulesPage() {
 							</span>
 							<span className="text-[11px] text-[#FFFFFF59] tabular-nums">{activeCount}</span>
 						</button>
+						<Link
+							to={customHubPath}
+							className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${onCustomHub ? "bg-tw-card text-white" : "text-[#FFFFFF99] hover:bg-[#ffffff08]"}`}
+						>
+							<span className="flex items-center gap-2">
+								<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><rect x="2.5" y="2.5" width="9" height="9" rx="2" stroke="currentColor" strokeWidth="1.2"/></svg>
+								Custom
+							</span>
+							{customRuleCount > 0 && (
+								<span className="text-[11px] text-[#FFFFFF59] tabular-nums">{customRuleCount}</span>
+							)}
+						</Link>
 						<button
 							type="button"
 							onClick={() => setTab("people")}
@@ -655,18 +692,6 @@ function RulesPage() {
 					{/* Marketplace tab: all rules */}
 					{tab === "marketplace" && (
 						<div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-				<RuleCardGrid
-					title="AI slop detection"
-					modalTitle="AI slop detection"
-					description="Use known detection patterns to minimize automated activity"
-					enabled={activeConfig.aiSlopDetection.enabled}
-					action={activeConfig.aiSlopDetection.action}
-					onToggle={(value) => toggleRule("aiSlopDetection", value)}
-					onActionChange={(action) => updateRuleValue("aiSlopDetection", { action })}
-					visualization={<AiSlopViz />}
-					comingSoon
-					{...ruleConfigureProps("aiSlopDetection")}
-				/>
 				<RuleCardGrid
 					title={`Require contributions in ${activeConfig.languageRequirement.language}`}
 					modalTitle="Language requirement"
@@ -833,7 +858,7 @@ function RulesPage() {
 					action={activeConfig.aiHoneypot.action}
 					onToggle={(value) => toggleRule("aiHoneypot", value)}
 					onActionChange={(action) => updateRuleValue("aiHoneypot", { action })}
-					visualization={<AiSlopViz />}
+					visualization={<CryptoViz />}
 					configureHint={({ close }) => (
 						<>
 							Honeypot phrases and the hidden line injected into your PR template live in the{" "}
@@ -865,37 +890,34 @@ function RulesPage() {
 							</div>
 						) : (
 							<div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-								{activeConfig.aiSlopDetection.enabled && matchesSearch(allRules[0]) && (
-									<RuleCardGrid title="AI slop detection" modalTitle="AI slop detection" description="Use known detection patterns to minimize automated activity" enabled={true} action={activeConfig.aiSlopDetection.action} onToggle={(v) => toggleRule("aiSlopDetection", v)} onActionChange={(a) => updateRuleValue("aiSlopDetection", { action: a })} visualization={<AiSlopViz />} comingSoon {...ruleConfigureProps("aiSlopDetection")} />
-								)}
-								{activeConfig.languageRequirement.enabled && matchesSearch(allRules[1]) && (
+								{activeConfig.languageRequirement.enabled && matchesSearch(allRules[0]) && (
 									<RuleCardGrid title={`Require contributions in ${activeConfig.languageRequirement.language}`} modalTitle="Language requirement" description="Contributions in a disallowed language will be declined" enabled={true} action={activeConfig.languageRequirement.action} onToggle={(v) => toggleRule("languageRequirement", v)} onActionChange={(a) => updateRuleValue("languageRequirement", { action: a })} visualization={<LanguageViz />} {...ruleConfigureProps("languageRequirement")} />
 								)}
-								{activeConfig.minMergedPrs.enabled && matchesSearch(allRules[2]) && (
+								{activeConfig.minMergedPrs.enabled && matchesSearch(allRules[1]) && (
 									<RuleCardGrid title={`At least ${activeConfig.minMergedPrs.count} merged PRs`} modalTitle="Minimum merged PRs" description="Minimum merged pull requests before they can contribute" enabled={true} action={activeConfig.minMergedPrs.action} onToggle={(v) => toggleRule("minMergedPrs", v)} onActionChange={(a) => updateRuleValue("minMergedPrs", { action: a })} visualization={<MergedPrsViz />} numericConfig={{ value: activeConfig.minMergedPrs.count, label: "Minimum merged PRs", onChange: (count) => updateRuleValue("minMergedPrs", { count }) }} {...ruleConfigureProps("minMergedPrs")} />
 								)}
-								{activeConfig.accountAge.enabled && matchesSearch(allRules[3]) && (
+								{activeConfig.accountAge.enabled && matchesSearch(allRules[2]) && (
 									<RuleCardGrid title={`Account older than ${activeConfig.accountAge.days} days`} modalTitle="Account age requirement" description="Block accounts created too recently from contributing" enabled={true} action={activeConfig.accountAge.action} onToggle={(v) => toggleRule("accountAge", v)} onActionChange={(a) => updateRuleValue("accountAge", { action: a })} visualization={<AccountAgeViz />} numericConfig={{ value: activeConfig.accountAge.days, label: "Minimum account age (days)", onChange: (days) => updateRuleValue("accountAge", { days }) }} {...ruleConfigureProps("accountAge")} />
 								)}
-								{activeConfig.maxPrsPerDay.enabled && matchesSearch(allRules[4]) && (
+								{activeConfig.maxPrsPerDay.enabled && matchesSearch(allRules[3]) && (
 									<RuleCardGrid title={`Max ${activeConfig.maxPrsPerDay.limit} PRs per day`} modalTitle="Max PRs per day" description="Rate limit how many PRs or issues a single user can open per day" enabled={true} action={activeConfig.maxPrsPerDay.action} onToggle={(v) => toggleRule("maxPrsPerDay", v)} onActionChange={(a) => updateRuleValue("maxPrsPerDay", { action: a })} visualization={<MaxPrsPerDayViz />} numericConfig={{ value: activeConfig.maxPrsPerDay.limit, label: "Maximum PRs per day", onChange: (limit) => updateRuleValue("maxPrsPerDay", { limit }) }} {...ruleConfigureProps("maxPrsPerDay")} />
 								)}
-								{activeConfig.maxFilesChanged.enabled && matchesSearch(allRules[5]) && (
+								{activeConfig.maxFilesChanged.enabled && matchesSearch(allRules[4]) && (
 									<RuleCardGrid title={`Max ${activeConfig.maxFilesChanged.limit} files changed`} modalTitle="Max files changed" description="Block pull requests that touch too many files in a single submission" enabled={true} action={activeConfig.maxFilesChanged.action} onToggle={(v) => toggleRule("maxFilesChanged", v)} onActionChange={(a) => updateRuleValue("maxFilesChanged", { action: a })} visualization={<MaxFilesChangedViz />} numericConfig={{ value: activeConfig.maxFilesChanged.limit, label: "Maximum files changed", onChange: (limit) => updateRuleValue("maxFilesChanged", { limit }) }} {...ruleConfigureProps("maxFilesChanged")} />
 								)}
-								{activeConfig.repoActivityMinimum.enabled && matchesSearch(allRules[6]) && (
+								{activeConfig.repoActivityMinimum.enabled && matchesSearch(allRules[5]) && (
 									<RuleCardGrid title={`At least ${activeConfig.repoActivityMinimum.minRepos} public repos`} modalTitle="Repo activity minimum" description="Contributor must have meaningful activity across other public repos" enabled={true} action={activeConfig.repoActivityMinimum.action} onToggle={(v) => toggleRule("repoActivityMinimum", v)} onActionChange={(a) => updateRuleValue("repoActivityMinimum", { action: a })} visualization={<RepoActivityViz />} numericConfig={{ value: activeConfig.repoActivityMinimum.minRepos, label: "Minimum public repos", onChange: (minRepos) => updateRuleValue("repoActivityMinimum", { minRepos }) }} {...ruleConfigureProps("repoActivityMinimum")} />
 								)}
-								{activeConfig.requireProfileReadme.enabled && matchesSearch(allRules[7]) && (
+								{activeConfig.requireProfileReadme.enabled && matchesSearch(allRules[6]) && (
 									<RuleCardGrid title="Require profile README" modalTitle="Require profile README" description="Contributors must have a profile README on their GitHub account" enabled={true} action={activeConfig.requireProfileReadme.action} onToggle={(v) => toggleRule("requireProfileReadme", v)} onActionChange={(a) => updateRuleValue("requireProfileReadme", { action: a })} visualization={<ProfileReadmeViz />} {...ruleConfigureProps("requireProfileReadme")} />
 								)}
-								{activeConfig.cryptoAddressDetection.enabled && matchesSearch(allRules[8]) && (
+								{activeConfig.cryptoAddressDetection.enabled && matchesSearch(allRules[7]) && (
 									<RuleCardGrid title="Crypto address detection" modalTitle="Crypto address detection" description="Block content containing cryptocurrency wallet addresses (BTC, ETH, SOL, XMR, DASH)" enabled={true} action={activeConfig.cryptoAddressDetection.action} onToggle={(v) => toggleRule("cryptoAddressDetection", v)} onActionChange={(a) => updateRuleValue("cryptoAddressDetection", { action: a })} visualization={<CryptoViz />} {...ruleConfigureProps("cryptoAddressDetection")} />
 								)}
-								{activeConfig.vouchedUsersOnly.enabled && matchesSearch(allRules[9]) && (
+								{activeConfig.vouchedUsersOnly.enabled && matchesSearch(allRules[8]) && (
 									<RuleCardGrid title="Vouched users only" modalTitle="Vouched users only" description={activeConfig.vouchedUsersOnly.vouchScope === "global" ? "Global vouches only" : activeConfig.vouchedUsersOnly.vouchScope === "both" ? "Repo whitelist + global vouches" : "Repo whitelist only"} enabled={true} action={activeConfig.vouchedUsersOnly.action} onToggle={(v) => toggleRule("vouchedUsersOnly", v)} onActionChange={(a) => updateRuleValue("vouchedUsersOnly", { action: a })} visualization={<VouchedUsersViz />} {...ruleConfigureProps("vouchedUsersOnly")} />
 								)}
-								{activeConfig.aiHoneypot.enabled && matchesSearch(allRules[10]) && (
+								{activeConfig.aiHoneypot.enabled && matchesSearch(allRules[9]) && (
 									<RuleCardGrid
 										title="AI honeypot"
 										modalTitle="AI honeypot"
@@ -904,7 +926,7 @@ function RulesPage() {
 										action={activeConfig.aiHoneypot.action}
 										onToggle={(v) => toggleRule("aiHoneypot", v)}
 										onActionChange={(a) => updateRuleValue("aiHoneypot", { action: a })}
-										visualization={<AiSlopViz />}
+										visualization={<CryptoViz />}
 										configureHint={({ close }) => (
 											<>
 												Honeypot phrases and the hidden line injected into your PR template live in the{" "}

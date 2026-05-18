@@ -7,6 +7,7 @@ import { useGitHubUserFormatted } from "#/lib/use-github-user";
 import { toastManager } from "#/components/ui/toast";
 import { toastFromError } from "#/lib/toast-error";
 import { invalidateListCaches } from "#/lib/cache";
+import { isCustomRuleName, stripCustomRulePrefix } from "#/lib/custom-rules-utils";
 
 export const Route = createFileRoute("/_app/$orgHandle/events/$eventId")({
 	component: EventDetailPage,
@@ -335,13 +336,22 @@ function EventDetailPage() {
 				>
 					<div className="flex flex-col gap-[3px]">
 						{displayEvent?.ruleName ? (
-							<RuleTraceRow
-								label={formatRuleName(displayEvent.ruleName)}
-								result={
-									displayEvent.severity === "error" ? "blocked" : "flagged"
-								}
-								detail="Rule triggered on this content"
-							/>
+							<>
+								{isCustomRuleName(displayEvent.ruleName) && (
+									<div className="flex items-center gap-1.5 px-3 py-1">
+										<span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[11px] font-medium text-purple-300 leading-none">
+											Custom Rule
+										</span>
+									</div>
+								)}
+								<RuleTraceRow
+									label={formatRuleName(displayEvent.ruleName)}
+									result={
+										displayEvent.severity === "error" ? "blocked" : "flagged"
+									}
+									detail="Rule triggered on this content"
+								/>
+							</>
 						) : (
 							<div className="rounded-[10px] bg-tw-inner px-3 py-2.5 text-[13px] text-tw-text-secondary">
 								No rule trace available
@@ -848,8 +858,11 @@ function getEventTitle(action: string, severity: string | null | undefined): str
 	return title;
 }
 
-import { RULE_META } from "@tripwire/db";
+import { RULE_META } from "@tripwire/db/schema/rule-meta";
 function formatRuleName(ruleName: string): string {
+	if (isCustomRuleName(ruleName)) {
+		return stripCustomRulePrefix(ruleName);
+	}
 	return (RULE_META as Record<string, { name: string }>)[ruleName]?.name ?? ruleName;
 }
 

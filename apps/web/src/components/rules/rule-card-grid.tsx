@@ -9,7 +9,6 @@ import {
 import { Button } from "#/components/ui/button";
 
 export {
-	AiSlopViz,
 	ProfilePictureViz,
 	LanguageViz,
 	MergedPrsViz,

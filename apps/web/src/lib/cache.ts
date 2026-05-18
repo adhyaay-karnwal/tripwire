@@ -42,8 +42,7 @@ export function invalidateEventCaches(queryClient: QueryClient, repoId: string) 
 				str.includes("events") ||
 				str.includes("digest") ||
 				str.includes("countsByAction") ||
-				str.includes("severityCounts") ||
-				str.includes("slopBlocked")
+				str.includes("severityCounts")
 			);
 		},
 	});

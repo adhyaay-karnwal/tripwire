@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -50,17 +50,17 @@ function DevelopersSettingsPage() {
 		}),
 	);
 
-	const handleCreate = useCallback(() => {
+	const handleCreate = () => {
 		if (!orgId || !newKeyName.trim()) return;
 		createKey.mutate({ orgId, name: newKeyName.trim() });
-	}, [orgId, newKeyName, createKey]);
+	};
 
-	const handleCopy = useCallback(() => {
+	const handleCopy = () => {
 		if (!revealedKey) return;
 		navigator.clipboard.writeText(revealedKey);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
-	}, [revealedKey]);
+	};
 
 	const keys = keysQuery.data ?? [];
 

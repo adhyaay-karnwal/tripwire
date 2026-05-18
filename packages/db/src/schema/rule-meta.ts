@@ -15,11 +15,6 @@ export interface RuleMeta {
 }
 
 export const RULE_META: Record<RuleKey, RuleMeta> = {
-	aiSlopDetection: {
-		name: "AI Slop Detection",
-		description: "Use known detection patterns to minimize automated activity",
-		comingSoon: true,
-	},
 	languageRequirement: {
 		name: "Language Requirement",
 		description: "Contributions in a disallowed language will be declined",

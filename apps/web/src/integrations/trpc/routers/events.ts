@@ -398,34 +398,4 @@ export const eventsRouter = {
 				whitelist_bypass: counts["whitelist_bypass"] ?? 0,
 			};
 		}),
-	/** Count events blocked by AI slop detection */
-	slopBlocked: authedProcedure
-		.input(
-			z.object({
-				repoId: z.string().uuid(),
-				days: z.number().int().min(1).max(90).default(30),
-			}),
-		)
-		.query(async ({ ctx, input }) => {
-			await assertRepoOwner(ctx.user.id, input.repoId);
-
-			const since = new Date();
-			since.setDate(since.getDate() - input.days);
-
-			const [result] = await db
-				.select({
-					count: sql<number>`count(*)::int`,
-				})
-				.from(events)
-				.where(
-					and(
-						eq(events.repoId, input.repoId),
-						gte(events.createdAt, since),
-						eq(events.ruleName, "aiSlopDetection"),
-						inArray(events.action, ["pipeline_blocked", "pr_closed", "issue_closed", "comment_deleted"]),
-					),
-				);
-
-			return { count: result?.count ?? 0 };
-		}),
 } satisfies TRPCRouterRecord;

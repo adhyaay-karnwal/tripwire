@@ -1,5 +1,5 @@
 import { Renderer, Program, Mesh, Color, Triangle, Texture } from "ogl";
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 const vertexShader = `
 attribute vec2 position;
@@ -311,11 +311,11 @@ export default function FaultyTerminal({
 	gameCanvasRef.current = gameCanvas;
 	gameMixRef.current = gameMix;
 
-	const tintVec = useMemo(() => hexToRgb(tint), [tint]);
-	const ditherValue = useMemo(() => (typeof dither === "boolean" ? (dither ? 1 : 0) : dither), [dither]);
+	const tintVec = hexToRgb(tint);
+	const ditherValue = typeof dither === "boolean" ? (dither ? 1 : 0) : dither;
 	const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
 
-	const maskKey = useMemo(() => (cursorMask ? JSON.stringify(cursorMask) : ""), [cursorMask]);
+	const maskKey = cursorMask ? JSON.stringify(cursorMask) : "";
 	const maskHalfSize = useMemo(() => {
 		if (!cursorMask) return new Float32Array([0, 0]);
 		const [vbW, vbH] = cursorMask.viewBox;

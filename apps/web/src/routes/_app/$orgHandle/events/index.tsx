@@ -3,9 +3,10 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTRPC } from "#/integrations/trpc/react";
 import { useWorkspace } from "#/lib/workspace-context";
 import { EmptyState } from "#/components/layout/empty-state";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { markEventsViewed } from "#/lib/use-events-unread";
 import { routes } from "#/lib/routes";
+import { isCustomRuleName, stripCustomRulePrefix } from "#/lib/custom-rules-utils";
 
 export const Route = createFileRoute("/_app/$orgHandle/events/")({
 	component: EventsPage,
@@ -60,7 +61,7 @@ type FilterState = {
 	username: string;
 };
 
-import { RULE_META } from "@tripwire/db";
+import { RULE_META } from "@tripwire/db/schema/rule-meta";
 const RULE_NAMES: Record<string, string> = {
 	...Object.fromEntries(Object.entries(RULE_META).map(([k, v]) => [k, v.name])),
 	blacklist: "Blacklist",
@@ -120,7 +121,17 @@ function EventRow({ event }: { event: Event }) {
 
 			{/* Tags */}
 			<div className="flex items-center gap-1.5 shrink-0">
-				{event.ruleName && (
+				{event.ruleName && isCustomRuleName(event.ruleName) && (
+					<>
+						<span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[11px] font-medium text-purple-300 leading-none">
+							Custom
+						</span>
+						<span className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] font-medium text-[#FFFFFF73] leading-none">
+							{stripCustomRulePrefix(event.ruleName)}
+						</span>
+					</>
+				)}
+				{event.ruleName && !isCustomRuleName(event.ruleName) && (
 					<span className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] font-medium text-[#FFFFFF73] leading-none">
 						{RULE_NAMES[event.ruleName] ?? event.ruleName}
 					</span>
@@ -303,16 +314,13 @@ function EventsPage() {
 	const [page, setPage] = useState(0);
 	const limit = 50;
 
-	const queryInput = useMemo(
-		() => ({
-			repoId: repoId!,
-			limit,
-			offset: page * limit,
-			actions: filters.action ? [filters.action] : undefined,
-			targetUsername: filters.username || undefined,
-		}),
-		[repoId, page, filters],
-	)
+	const queryInput = {
+		repoId: repoId!,
+		limit,
+		offset: page * limit,
+		actions: filters.action ? [filters.action] : undefined,
+		targetUsername: filters.username || undefined,
+	};
 
 	const eventsQuery = useQuery({
 		...trpc.events.list.queryOptions(queryInput),

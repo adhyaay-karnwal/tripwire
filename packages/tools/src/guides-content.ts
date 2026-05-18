@@ -109,8 +109,6 @@ lives at \`src/lib/rules/config-schema.ts\` in the Tripwire repo.
 
 Built-in rules and the typed setter that adjusts each one:
 
-- **aiSlopDetection** — heuristics for AI-generated PR/issue bodies.
-  No threshold field. Toggle and set action only.
 - **languageRequirement** — block content that isn't the configured language.
   Setter: set_language_requirement({ language }).
 - **minMergedPrs** — require the author to have at least N merged PRs

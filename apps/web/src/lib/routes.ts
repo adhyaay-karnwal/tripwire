@@ -2,7 +2,8 @@
 export function workspaceRoutes(orgSlug: string) {
     return {
         home: `/${orgSlug}/home`,
-        rules: `/${orgSlug}/rules`,
+        rules: `/${orgSlug}/rules/`,
+        customRules: `/${orgSlug}/rules/custom`,
         events: `/${orgSlug}/events`,
         event: (eventId: string) => `/${orgSlug}/events/${eventId}`,
         insights: `/${orgSlug}/insights`,

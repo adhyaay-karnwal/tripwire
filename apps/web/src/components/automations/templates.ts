@@ -40,23 +40,18 @@ export const templates: WorkflowTemplate[] = [
 	{
 		id: "spam_detector",
 		name: "Content Filter",
-		description: "Block AI-generated text and crypto address spam on PRs and issues.",
+		description: "Block crypto address spam on PRs and issues.",
 		accent: "#F56D5D", // error/block color
 		nodes: [
 			{ id: "trigger_1", type: "trigger", position: { x: 300, y: 50 }, data: { trigger: "pr_opened" } },
-			{ id: "rule_1", type: "rule", position: { x: 150, y: 220 }, data: { rule: "aiSlopDetection" } },
-			{ id: "rule_2", type: "rule", position: { x: 430, y: 220 }, data: { rule: "cryptoAddressDetection" } },
-			{ id: "logic_1", type: "logic", position: { x: 300, y: 390 }, data: { gate: "OR" } },
-			{ id: "action_1", type: "action", position: { x: 200, y: 540 }, data: { action: "block", message: "Spam detected" } },
-			{ id: "action_2", type: "action", position: { x: 420, y: 540 }, data: { action: "add_to_blacklist" } },
+			{ id: "rule_1", type: "rule", position: { x: 300, y: 220 }, data: { rule: "cryptoAddressDetection" } },
+			{ id: "action_1", type: "action", position: { x: 200, y: 390 }, data: { action: "block", message: "Spam detected" } },
+			{ id: "action_2", type: "action", position: { x: 420, y: 390 }, data: { action: "add_to_blacklist" } },
 		],
 		edges: [
 			{ id: "e1", source: "trigger_1", target: "rule_1", animated: true, style: edgeStyle() },
-			{ id: "e2", source: "trigger_1", target: "rule_2", animated: true, style: edgeStyle() },
-			{ id: "e3", source: "rule_1", sourceHandle: "fail", target: "logic_1", targetHandle: "a", animated: true, style: edgeStyle("#F56D5D66") },
-			{ id: "e4", source: "rule_2", sourceHandle: "fail", target: "logic_1", targetHandle: "b", animated: true, style: edgeStyle("#F56D5D66") },
-			{ id: "e5", source: "logic_1", target: "action_1", animated: true, style: edgeStyle() },
-			{ id: "e6", source: "logic_1", target: "action_2", animated: true, style: edgeStyle() },
+			{ id: "e2", source: "rule_1", sourceHandle: "fail", target: "action_1", animated: true, style: edgeStyle("#F56D5D66") },
+			{ id: "e3", source: "rule_1", sourceHandle: "fail", target: "action_2", animated: true, style: edgeStyle("#F56D5D66") },
 		],
 	},
 	{

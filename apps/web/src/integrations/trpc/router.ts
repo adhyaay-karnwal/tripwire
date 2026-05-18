@@ -12,6 +12,7 @@ import { fakeBountiesRouter } from "./routers/fake-bounties";
 import { apiKeysRouter } from "./routers/api-keys";
 import { preferencesRouter } from "./routers/preferences";
 import { workflowsRouter } from "./routers/workflows";
+import { customRulesRouter } from "./routers/custom-rules";
 
 export const trpcRouter = createTRPCRouter({
 	orgs: orgsRouter,
@@ -28,6 +29,7 @@ export const trpcRouter = createTRPCRouter({
 	apiKeys: apiKeysRouter,
 	preferences: preferencesRouter,
 	workflows: workflowsRouter,
+	customRules: customRulesRouter,
 });
 
 export type TRPCRouter = typeof trpcRouter;

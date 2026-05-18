@@ -24,7 +24,6 @@ const honeypotPhraseSchema = z.object({
 });
 
 export const ruleConfigSchema = z.object({
-	aiSlopDetection: ruleBaseSchema,
 	languageRequirement: ruleBaseSchema.extend({
 		language: z.string(),
 	}),

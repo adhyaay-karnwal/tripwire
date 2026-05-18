@@ -74,7 +74,9 @@ function EditableParam({
 	const [draft, setDraft] = useState<string>(String(value));
 	const inputRef = useRef<HTMLInputElement>(null);
 
-	useEffect(() => { setDraft(String(value)); }, [value]);
+	if (draft !== String(value) && !editing) {
+		setDraft(String(value));
+	}
 	useEffect(() => { if (editing) { inputRef.current?.focus(); inputRef.current?.select(); } }, [editing]);
 
 	const commit = useCallback(() => {
@@ -251,14 +253,25 @@ const triggerLabels: Record<string, string> = {
 	repo_scan: "Repo History Scan",
 };
 
-import { RULE_META, type RuleKey } from "@tripwire/db";
+import { RULE_META } from "@tripwire/db/schema/rule-meta";
 import { formatCamelCase } from "#/lib/format";
+import {
+	SIGNAL_REGISTRY,
+	SIGNAL_CATEGORIES,
+	getSignalsByCategory,
+	getOperatorsForType,
+} from "@tripwire/core/rules/signal-registry";
 
 /** Rule labels derived from the single source of truth in @tripwire/db */
 const ruleLabels: Record<string, string> = new Proxy(
 	Object.fromEntries(Object.entries(RULE_META).map(([k, v]) => [k, v.name])),
-	{ get(target, prop: string) { return target[prop] ?? formatCamelCase(prop); } },
+	{ get(target, prop, receiver) {
+		if (typeof prop !== "string") return Reflect.get(target, prop, receiver);
+		return target[prop] ?? formatCamelCase(prop);
+	} },
 );
+
+const RULE_KEYS = Object.keys(RULE_META) as string[];
 
 /** Rules hidden from the workflow palette */
 const HIDDEN_RULES = new Set(
@@ -330,14 +343,44 @@ export const RuleNode = memo(({ id, data, selected }: NodeProps) => {
 RuleNode.displayName = "RuleNode";
 
 export const ConditionNode = memo(({ id, data, selected }: NodeProps) => {
-	const field = (data.field as string) ?? "score";
-	const op = (data.operator as string) ?? ">";
-	const val = data.value ?? "50";
+	const signalMode = data.signalMode === true;
 	const { setNodes } = useReactFlow();
 
-	const updateField = useCallback((key: string, newVal: string) => {
-		setNodes((nodes) => nodes.map((n) => n.id !== id ? n : { ...n, data: { ...n.data, [key]: newVal } }));
+	const updateData = useCallback((patch: Record<string, unknown>) => {
+		setNodes((nodes) => nodes.map((n) => n.id !== id ? n : { ...n, data: { ...n.data, ...patch } }));
 	}, [id, setNodes]);
+
+	if (!signalMode) {
+		const field = (data.field as string) ?? "score";
+		const op = (data.operator as string) ?? ">";
+		const val = data.value ?? "50";
+		return (
+			<>
+				<Handle type="target" position={Position.Top} className={`${handleBase} !-top-1.5`} />
+				<NodeShell
+					color={colors.condition}
+					icon={icons.condition}
+					label="Condition"
+					sublabel={`${field} ${op} ${val}`}
+					selected={selected}
+				>
+					<Param label="Field" value={String(field)} />
+					<Param label="Operator" value={String(op)} />
+					<EditableParam label="Value" value={Number(val) || 0} nodeId={id} paramKey="value" directData />
+				</NodeShell>
+				<Handle type="source" position={Position.Bottom} id="true" className={`${handleBase} !-bottom-1.5 !left-[30%] !bg-tw-success/20 !border-tw-success/40`} />
+				<Handle type="source" position={Position.Bottom} id="false" className={`${handleBase} !-bottom-1.5 !left-[70%] !bg-tw-error/20 !border-tw-error/40`} />
+			</>
+		);
+	}
+
+	const signalId = (data.signal as string) ?? "";
+	const op = (data.operator as string) ?? "";
+	const val = data.value;
+	const signal = SIGNAL_REGISTRY.find((s) => s.id === signalId);
+	const signalType = signal?.type ?? "number";
+	const operators = getOperatorsForType(signalType);
+	const sublabel = signalId ? `${signal?.name ?? signalId} ${op} ${val ?? "?"}` : "Select a signal";
 
 	return (
 		<>
@@ -345,13 +388,85 @@ export const ConditionNode = memo(({ id, data, selected }: NodeProps) => {
 			<NodeShell
 				color={colors.condition}
 				icon={icons.condition}
-				label="Condition"
-				sublabel={`${field} ${op} ${val}`}
+				label="Signal Condition"
+				sublabel={sublabel}
 				selected={selected}
 			>
-				<Param label="Field" value={String(field)} />
-				<Param label="Operator" value={String(op)} />
-				<EditableParam label="Value" value={Number(val) || 0} nodeId={id} paramKey="value" directData />
+				<div className="flex flex-col gap-1.5">
+					<div className="flex items-center justify-between gap-2 py-0.5">
+						<span className="text-[11px] text-tw-text-tertiary shrink-0">Signal</span>
+						<select
+							value={signalId}
+							onChange={(e) => {
+								const newSignal = SIGNAL_REGISTRY.find((s) => s.id === e.target.value);
+								const newOps = newSignal ? getOperatorsForType(newSignal.type) : [];
+								const defaultOp = newOps[0] ?? "";
+								const defaultVal = newSignal?.type === "boolean" ? "true" : newSignal?.type === "number" ? "0" : "";
+								updateData({ signal: e.target.value, operator: defaultOp, value: defaultVal });
+							}}
+							onClick={(e) => e.stopPropagation()}
+							className="flex-1 min-w-0 px-1.5 py-0.5 rounded-md text-[11px] bg-tw-surface text-tw-text-primary border border-tw-border outline-none cursor-pointer"
+						>
+							<option value="">Select signal...</option>
+							{SIGNAL_CATEGORIES.map((cat) => {
+								const signals = getSignalsByCategory(cat.id);
+								if (signals.length === 0) return null;
+								return (
+									<optgroup key={cat.id} label={cat.name}>
+										{signals.map((s) => (
+											<option key={s.id} value={s.id}>
+												{s.name}{s.requiresEnrichment ? " (Pro)" : ""}
+											</option>
+										))}
+									</optgroup>
+								);
+							})}
+						</select>
+					</div>
+
+					{signalId && (
+						<div className="flex items-center justify-between gap-2 py-0.5">
+							<span className="text-[11px] text-tw-text-tertiary shrink-0">Operator</span>
+							<select
+								value={op}
+								onChange={(e) => updateData({ operator: e.target.value })}
+								onClick={(e) => e.stopPropagation()}
+								className="flex-1 min-w-0 px-1.5 py-0.5 rounded-md text-[11px] bg-tw-surface text-tw-text-primary border border-tw-border outline-none cursor-pointer"
+							>
+								{operators.map((o) => (
+									<option key={o} value={o}>{o}</option>
+								))}
+							</select>
+						</div>
+					)}
+
+					{signalId && signalType === "boolean" && (
+						<div className="flex items-center justify-between gap-2 py-0.5">
+							<span className="text-[11px] text-tw-text-tertiary shrink-0">Value</span>
+							<select
+								value={String(val ?? "true")}
+								onChange={(e) => updateData({ value: e.target.value })}
+								onClick={(e) => e.stopPropagation()}
+								className="flex-1 min-w-0 px-1.5 py-0.5 rounded-md text-[11px] bg-tw-surface text-tw-text-primary border border-tw-border outline-none cursor-pointer"
+							>
+								<option value="true">true</option>
+								<option value="false">false</option>
+							</select>
+						</div>
+					)}
+
+					{signalId && signalType === "number" && (
+						<EditableParam label="Value" value={Number(val) || 0} nodeId={id} paramKey="value" directData />
+					)}
+
+					{signalId && signalType === "string" && (
+						<EditableText label="Value" value={String(val ?? "")} nodeId={id} fieldKey="value" placeholder="Enter value..." />
+					)}
+
+					{signal?.requiresEnrichment && (
+						<span className="text-[10px] text-tw-accent">Pro</span>
+					)}
+				</div>
 			</NodeShell>
 			<Handle type="source" position={Position.Bottom} id="true" className={`${handleBase} !-bottom-1.5 !left-[30%] !bg-tw-success/20 !border-tw-success/40`} />
 			<Handle type="source" position={Position.Bottom} id="false" className={`${handleBase} !-bottom-1.5 !left-[70%] !bg-tw-error/20 !border-tw-error/40`} />
@@ -459,4 +574,4 @@ export const nodeTypes = {
 	transform: TransformNode,
 };
 
-export { colors as nodeColors, icons as nodeIcons, triggerLabels, ruleLabels, actionLabels, HIDDEN_RULES };
+export { colors as nodeColors, icons as nodeIcons, triggerLabels, ruleLabels, actionLabels, HIDDEN_RULES, RULE_KEYS };

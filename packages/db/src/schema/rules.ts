@@ -51,7 +51,6 @@ export type RepoFilesConfig = {
 };
 
 export type RuleConfig = {
-	aiSlopDetection: RuleBase;
 	languageRequirement: RuleBase & { language: string };
 	minMergedPrs: RuleBase & { count: number };
 	accountAge: RuleBase & { days: number };
@@ -73,7 +72,6 @@ export type RuleConfig = {
 
 /** Keys of RuleConfig that represent actual rules (i.e. have RuleBase shape). */
 export const RULE_KEYS = [
-	"aiSlopDetection",
 	"languageRequirement",
 	"minMergedPrs",
 	"accountAge",
@@ -89,7 +87,6 @@ export type RuleKey = (typeof RULE_KEYS)[number];
 
 
 export const DEFAULT_RULE_CONFIG: RuleConfig = {
-	aiSlopDetection: { enabled: false, action: "block" },
 	languageRequirement: { enabled: false, action: "block", language: "English" },
 	minMergedPrs: { enabled: false, action: "block", count: 15 },
 	accountAge: { enabled: false, action: "block", days: 30 },

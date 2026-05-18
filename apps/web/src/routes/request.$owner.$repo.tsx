@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { parseAsString, parseAsStringEnum, useQueryStates } from "nuqs";
@@ -22,10 +22,7 @@ function RequestPage() {
 	const { data: session, isPending } = authClient.useSession();
 
 	const repoFullName = `${owner}/${repo}`;
-	const setKind = useCallback(
-		(next: "unblock" | "access") => setSearch({ kind: next }),
-		[setSearch],
-	);
+	const setKind = (next: "unblock" | "access") => setSearch({ kind: next });
 	const [reason, setReason] = useState("");
 	const [submitted, setSubmitted] = useState(false);
 
@@ -53,31 +50,25 @@ function RequestPage() {
 		}),
 	);
 
-	const handleLogin = useCallback(async () => {
+	const handleLogin = async () => {
 		await authClient.signIn.social({
 			provider: "github",
 			callbackURL: typeof window !== "undefined" ? window.location.href : "/",
 		});
-	}, []);
+	};
 
-	const handleSwitchAccount = useCallback(async () => {
+	const handleSwitchAccount = async () => {
 		const returnUrl = typeof window !== "undefined" ? window.location.href : "/";
 		await authClient.signOut();
 		await authClient.signIn.social({ provider: "github", callbackURL: returnUrl });
-	}, []);
+	};
 
-	const handleSubmit = useCallback(
-		(e: React.FormEvent) => {
-			e.preventDefault();
-			submit.mutate({ repoFullName, kind, reason });
-		},
-		[submit, repoFullName, kind, reason],
-	);
+	const handleSubmit = (e: React.FormEvent) => {
+		e.preventDefault();
+		submit.mutate({ repoFullName, kind, reason });
+	};
 
-	const canSubmit = useMemo(
-		() => reason.trim().length >= 10 && !submit.isPending,
-		[reason, submit.isPending],
-	);
+	const canSubmit = reason.trim().length >= 10 && !submit.isPending;
 
 	return (
 		<div className="h-screen flex flex-col overflow-hidden bg-tw-bg text-tw-text-primary">

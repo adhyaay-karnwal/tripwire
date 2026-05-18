@@ -1,4 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { onWorkflowMutation } from "#/lib/workflow-events";
+import { buildChangeSummary, type EditorSnapshot } from "#/lib/pending-changes";
+import { PendingChangesToolbar } from "#/components/automations/pending-changes-toolbar";
 import {
 	ReactFlow,
 	Background,
@@ -14,7 +17,7 @@ import {
 	BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "#/integrations/trpc/react";
 import {
 	nodeTypes,
@@ -23,9 +26,15 @@ import {
 	ruleLabels,
 	actionLabels,
 	HIDDEN_RULES,
+	RULE_KEYS,
 } from "./node-types";
-import { RULE_KEYS } from "@tripwire/db";
 import Dither from "#/components/Dither";
+import {
+	simulateWorkflow,
+	type SimMode,
+	type SimNodeResult,
+	type SimUserData,
+} from "#/lib/graph-evaluator";
 interface PaletteItem {
 	type: string;
 	label: string;
@@ -108,18 +117,19 @@ function NodePalette({ search, setSearch }: { search: string; setSearch: (s: str
 		e.dataTransfer.effectAllowed = "move";
 	};
 
-	const filtered = useMemo(() => {
-		if (!search.trim()) return paletteGroups;
-		const q = search.toLowerCase();
-		return paletteGroups
-			.map((g) => ({
-				...g,
-				items: g.items.filter(
-					(i) => i.label.toLowerCase().includes(q) || i.sublabel.toLowerCase().includes(q),
-				),
-			}))
-			.filter((g) => g.items.length > 0);
-	}, [search]);
+	const filtered = search.trim()
+		? (() => {
+			const q = search.toLowerCase();
+			return paletteGroups
+				.map((g) => ({
+					...g,
+					items: g.items.filter(
+						(i) => i.label.toLowerCase().includes(q) || i.sublabel.toLowerCase().includes(q),
+					),
+				}))
+				.filter((g) => g.items.length > 0);
+		})()
+		: paletteGroups;
 
 	return (
 		<div className="w-[220px] shrink-0 border-r border-tw-border bg-tw-surface flex flex-col relative">
@@ -195,177 +205,6 @@ function NodePalette({ search, setSearch }: { search: string; setSearch: (s: str
 		</div>
 	);
 }
-type SimMode = "pass" | "fail" | "user";
-
-interface SimNodeResult {
-	nodeId: string;
-	edgeId?: string;
-	status: "pass" | "fail" | "skipped" | "executed";
-	detail?: string;
-}
-
-interface SimUserData {
-	accountAgeDays: number;
-	followers: number;
-	following: number;
-	publicRepos: number;
-	publicNonForkRepos: number;
-	publicGists: number;
-	hasProfileReadme: boolean;
-	mergedPrs: number;
-	score: number;
-}
-
-function evaluateCondition(field: string, operator: string, value: string, userData: SimUserData): { pass: boolean; detail: string } {
-	const numVal = parseFloat(value);
-	const fieldMap: Record<string, number | boolean> = {
-		score: userData.score,
-		accountAgeDays: userData.accountAgeDays,
-		publicRepos: userData.publicRepos,
-		publicNonForkRepos: userData.publicNonForkRepos,
-		followers: userData.followers,
-		following: userData.following,
-		publicGists: userData.publicGists,
-		hasProfileReadme: userData.hasProfileReadme,
-	};
-	const actual = fieldMap[field];
-	if (actual === undefined) return { pass: true, detail: `${field} — unknown field` };
-	let pass: boolean;
-	if (typeof actual === "boolean") {
-		pass = actual === (value === "true");
-	} else {
-		switch (operator) {
-			case ">": pass = actual > numVal; break;
-			case ">=": pass = actual >= numVal; break;
-			case "<": pass = actual < numVal; break;
-			case "<=": pass = actual <= numVal; break;
-			case "==": pass = actual === numVal; break;
-			case "!=": pass = actual !== numVal; break;
-			default: pass = true;
-		}
-	}
-	return { pass, detail: `${pass ? "PASS" : "FAIL"} — ${field} is ${actual} (check: ${operator} ${value})` };
-}
-
-function evaluateRule(rule: string, params: Record<string, unknown> | undefined, userData: SimUserData): { pass: boolean; detail: string } {
-	switch (rule) {
-		case "accountAge": {
-			const threshold = (params?.days as number) ?? 30;
-			const pass = userData.accountAgeDays >= threshold;
-			return { pass, detail: `${pass ? "PASS" : "FAIL"} — account is ${userData.accountAgeDays}d old (requires >= ${threshold}d)` };
-		}
-		case "minMergedPrs": {
-			const threshold = (params?.count as number) ?? 15;
-			if (userData.mergedPrs === 0) return { pass: true, detail: "SKIP — merged PR count unavailable" };
-			const pass = userData.mergedPrs >= threshold;
-			return { pass, detail: `${pass ? "PASS" : "FAIL"} — ${userData.mergedPrs} merged PRs (requires >= ${threshold})` };
-		}
-		case "repoActivityMinimum": {
-			const threshold = (params?.minRepos as number) ?? 3;
-			const pass = userData.publicNonForkRepos >= threshold;
-			return { pass, detail: `${pass ? "PASS" : "FAIL"} — ${userData.publicNonForkRepos} non-fork repos (requires >= ${threshold})` };
-		}
-		case "requireProfileReadme": {
-			const pass = userData.hasProfileReadme;
-			return { pass, detail: `${pass ? "PASS" : "FAIL"} — profile README ${pass ? "exists" : "missing"}` };
-		}
-		case "contributorScore": {
-			const threshold = (params?.minScore as number) ?? 50;
-			const pass = userData.score >= threshold;
-			return { pass, detail: `${pass ? "PASS" : "FAIL"} — score is ${userData.score} (requires >= ${threshold})` };
-		}
-		case "maxFilesChanged": return { pass: true, detail: "SKIP — no file data in simulation" };
-		case "maxPrsPerDay": return { pass: true, detail: "SKIP — no PR rate data in simulation" };
-		case "aiSlopDetection": return { pass: true, detail: "SKIP — requires content text to analyze" };
-		case "cryptoAddressDetection": return { pass: true, detail: "SKIP — requires content text to analyze" };
-		case "aiHoneypot": return { pass: true, detail: "SKIP — requires content text to analyze" };
-		case "languageRequirement": return { pass: true, detail: "SKIP — requires content text to analyze" };
-		case "vouchedUsersOnly": return { pass: true, detail: "SKIP — requires vouch database lookup" };
-		default: return { pass: true, detail: "Unknown rule" };
-	}
-}
-
-function simulateWorkflow(nodes: Node[], edges: Edge[], mode: SimMode, userData: SimUserData): SimNodeResult[] {
-	const results: SimNodeResult[] = [];
-	const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-	const outgoing = new Map<string, Edge[]>();
-	for (const e of edges) {
-		if (!outgoing.has(e.source)) outgoing.set(e.source, []);
-		outgoing.get(e.source)!.push(e);
-	}
-	const nodeOutcome = new Map<string, boolean>();
-	const triggers = nodes.filter((n) => n.type === "trigger");
-	const queue = [...triggers.map((n) => n.id)];
-	const visited = new Set<string>();
-
-	for (const tid of triggers) {
-		results.push({ nodeId: tid.id, status: "executed", detail: "Triggered" });
-		nodeOutcome.set(tid.id, true);
-	}
-
-	while (queue.length > 0) {
-		const current = queue.shift()!;
-		if (visited.has(current)) continue;
-		visited.add(current);
-		const outEdges = outgoing.get(current) ?? [];
-		for (const edge of outEdges) {
-			const targetNode = nodeMap.get(edge.target);
-			if (!targetNode || visited.has(edge.target)) continue;
-			const sourceOutcome = nodeOutcome.get(current);
-			const sourceHandle = edge.sourceHandle;
-			const sourceNode = nodeMap.get(current);
-			if (sourceNode && (sourceNode.type === "rule" || sourceNode.type === "condition")) {
-				if (sourceHandle === "pass" && sourceOutcome === false) continue;
-				if (sourceHandle === "fail" && sourceOutcome === true) continue;
-				if (sourceHandle === "true" && sourceOutcome === false) continue;
-				if (sourceHandle === "false" && sourceOutcome === true) continue;
-			}
-			let pass = true;
-			let detail = "";
-			switch (targetNode.type) {
-				case "rule": {
-					if (mode === "pass") { pass = true; detail = "Forced PASS"; }
-					else if (mode === "fail") { pass = false; detail = "Forced FAIL"; }
-					else { const r = evaluateRule(targetNode.data.rule as string, targetNode.data.params as Record<string, unknown>, userData); pass = r.pass; detail = r.detail; }
-					results.push({ nodeId: edge.target, edgeId: edge.id, status: pass ? "pass" : "fail", detail });
-					break;
-				}
-				case "condition": {
-					if (mode === "pass") { pass = true; detail = "Forced PASS"; }
-					else if (mode === "fail") { pass = false; detail = "Forced FAIL"; }
-					else { const r = evaluateCondition(targetNode.data.field as string, targetNode.data.operator as string, String(targetNode.data.value), userData); pass = r.pass; detail = r.detail; }
-					results.push({ nodeId: edge.target, edgeId: edge.id, status: pass ? "pass" : "fail", detail });
-					break;
-				}
-				case "logic": {
-					const incomingEdges = edges.filter((e) => e.target === edge.target);
-					const inputResults = incomingEdges.map((e) => nodeOutcome.get(e.source)).filter((v) => v !== undefined) as boolean[];
-					const gate = targetNode.data.gate as string;
-					if (gate === "AND") pass = inputResults.length > 0 && inputResults.every(Boolean);
-					else if (gate === "OR") pass = inputResults.some(Boolean);
-					else if (gate === "NOT") pass = inputResults.length > 0 && !inputResults[0];
-					detail = `${gate}(${inputResults.map((r) => r ? "T" : "F").join(", ")}) → ${pass ? "TRUE" : "FALSE"}`;
-					results.push({ nodeId: edge.target, edgeId: edge.id, status: pass ? "pass" : "fail", detail });
-					break;
-				}
-				case "action": {
-					const action = targetNode.data.action as string;
-					detail = `Would execute: ${actionLabels[action] ?? action}`;
-					if (targetNode.data.message) detail += ` — "${targetNode.data.message}"`;
-					results.push({ nodeId: edge.target, edgeId: edge.id, status: "executed", detail });
-					break;
-				}
-				default: {
-					results.push({ nodeId: edge.target, edgeId: edge.id, status: "executed", detail: "Processed" });
-					break;
-				}
-			}
-			nodeOutcome.set(edge.target, pass);
-			queue.push(edge.target);
-		}
-	}
-	return results;
-}
 function SimulationPanel({
 	nodes,
 	edges,
@@ -418,11 +257,11 @@ function SimulationPanel({
 			const result = await fetchUser.mutateAsync({ username: username.trim(), repoId });
 			if (!result.found) { setError(`User "${username}" not found`); return; }
 			setUserData({ user: result.user, data: result.data });
-			results = simulateWorkflow(nodes, edges, "user", result.data);
+			results = simulateWorkflow(nodes, edges, "user", result.data, actionLabels);
 		} else {
 			setUserData(null);
 			const dummy: SimUserData = { accountAgeDays: 0, followers: 0, following: 0, publicRepos: 0, publicNonForkRepos: 0, publicGists: 0, hasProfileReadme: false, mergedPrs: 0, score: 0 };
-			results = simulateWorkflow(nodes, edges, mode, dummy);
+			results = simulateWorkflow(nodes, edges, mode, dummy, actionLabels);
 		}
 		setSimResults(results);
 		setSimStep(0);
@@ -620,11 +459,15 @@ interface WorkflowEditorProps {
 	onSave?: (nodes: Node[], edges: Edge[]) => void;
 	saveLabel?: string;
 	repoId?: string;
+	workflowId?: string;
+	onRemoteUpdate?: () => void;
 }
 
 const getId = () => `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-export function WorkflowEditor({ initialNodes = [], initialEdges = [], onSave, saveLabel, repoId }: WorkflowEditorProps) {
+export function WorkflowEditor({ initialNodes = [], initialEdges = [], onSave, saveLabel, repoId, workflowId, onRemoteUpdate }: WorkflowEditorProps) {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
 	const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
 	const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 	const [search, setSearch] = useState("");
@@ -635,10 +478,61 @@ export function WorkflowEditor({ initialNodes = [], initialEdges = [], onSave, s
 	const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
 	const initialSnapshot = useRef(JSON.stringify({ n: initialNodes.map((n) => ({ id: n.id, type: n.type, data: n.data })), e: initialEdges.map((e) => ({ id: e.id, source: e.source, target: e.target })) }));
 
-	const isDirty = useMemo(() => {
-		const current = JSON.stringify({ n: nodes.map((n) => ({ id: n.id, type: n.type, data: n.data })), e: edges.map((e) => ({ id: e.id, source: e.source, target: e.target })) });
-		return current !== initialSnapshot.current;
-	}, [nodes, edges]);
+	const [pendingChangeSummary, setPendingChangeSummary] = useState<string | null>(null);
+	const preChangeSnapshot = useRef<EditorSnapshot | null>(null);
+
+	const isDirty = JSON.stringify({ n: nodes.map((n) => ({ id: n.id, type: n.type, data: n.data })), e: edges.map((e) => ({ id: e.id, source: e.source, target: e.target })) }) !== initialSnapshot.current;
+
+	const nodesRef = useRef(nodes);
+	nodesRef.current = nodes;
+	const edgesRef = useRef(edges);
+	edgesRef.current = edges;
+
+	useEffect(() => {
+		if (!workflowId) return;
+		return onWorkflowMutation((mutatedId) => {
+			if (mutatedId !== workflowId) return;
+			preChangeSnapshot.current = {
+				nodes: nodesRef.current.map((n) => ({ ...n })),
+				edges: edgesRef.current.map((e) => ({ ...e })),
+			};
+			queryClient.fetchQuery(
+				trpc.workflows.get.queryOptions({ id: workflowId }),
+			).then((wf) => {
+				if (!wf) return;
+				const def = wf.definition as { nodes: Node[]; edges: Edge[] };
+				const before: EditorSnapshot = preChangeSnapshot.current ?? {
+					nodes: nodesRef.current,
+					edges: edgesRef.current,
+				};
+				const after: EditorSnapshot = { nodes: def.nodes, edges: def.edges };
+				const summary = buildChangeSummary(before, after);
+				setNodes(def.nodes);
+				setEdges(def.edges);
+				setPendingChangeSummary(summary);
+			}).catch(() => {
+				onRemoteUpdate?.();
+			});
+		});
+	}, [workflowId, onRemoteUpdate, trpc, queryClient, setNodes, setEdges]);
+
+	const handleAcceptChanges = () => {
+		setPendingChangeSummary(null);
+		preChangeSnapshot.current = null;
+		initialSnapshot.current = JSON.stringify({
+			n: nodes.map((n) => ({ id: n.id, type: n.type, data: n.data })),
+			e: edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+		});
+	};
+
+	const handleRevertChanges = () => {
+		if (preChangeSnapshot.current) {
+			setNodes(preChangeSnapshot.current.nodes);
+			setEdges(preChangeSnapshot.current.edges);
+		}
+		setPendingChangeSummary(null);
+		preChangeSnapshot.current = null;
+	};
 
 	// Progressive node highlighting based on animation step
 	const visibleSteps = simResults?.slice(0, simStep) ?? [];
@@ -701,10 +595,10 @@ export function WorkflowEditor({ initialNodes = [], initialEdges = [], onSave, s
 		[setEdges],
 	);
 
-	const onDragOver = useCallback((e: React.DragEvent) => {
+	const onDragOver = (e: React.DragEvent) => {
 		e.preventDefault();
 		e.dataTransfer.dropEffect = "move";
-	}, []);
+	};
 
 	const onDrop = useCallback(
 		(e: React.DragEvent) => {
@@ -792,6 +686,14 @@ export function WorkflowEditor({ initialNodes = [], initialEdges = [], onSave, s
 						</button>
 					)}
 				</div>
+
+				{pendingChangeSummary && (
+					<PendingChangesToolbar
+						summary={pendingChangeSummary}
+						onAccept={handleAcceptChanges}
+						onCancel={handleRevertChanges}
+					/>
+				)}
 			</div>
 			{showSim && (
 				<SimulationPanel
