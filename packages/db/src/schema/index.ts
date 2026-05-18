@@ -20,5 +20,6 @@ export * from "./api-keys";
 export * from "./waitlist";
 export * from "./user-preferences";
 export * from "./workflows";
+export * from "./workflow-runs";
 export * from "./github-cache";
 export * from "./custom-rules";

@@ -48,9 +48,16 @@ import { Route as AppOrgHandleInsightsRouteImport } from './routes/_app/$orgHand
 import { Route as AppOrgHandleHomeRouteImport } from './routes/_app/$orgHandle/home'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceSplatRouteImport } from './routes/[.well-known]/oauth-protected-resource/$'
 import { Route as Char91DotwellKnownChar93OauthAuthorizationServerSplatRouteImport } from './routes/[.well-known]/oauth-authorization-server/$'
+import { Route as AppOrgHandleRulesRouteRouteImport } from './routes/_app/$orgHandle/rules/route'
 import { Route as AppOrgHandleRulesIndexRouteImport } from './routes/_app/$orgHandle/rules/index'
 import { Route as AppOrgHandleEventsIndexRouteImport } from './routes/_app/$orgHandle/events/index'
 import { Route as AppOrgHandleAutomationsIndexRouteImport } from './routes/_app/$orgHandle/automations/index'
+import { Route as AppOrgHandleRulesWorkflowsRouteImport } from './routes/_app/$orgHandle/rules/workflows'
+import { Route as AppOrgHandleRulesRequestsRouteImport } from './routes/_app/$orgHandle/rules/requests'
+import { Route as AppOrgHandleRulesPeopleRouteImport } from './routes/_app/$orgHandle/rules/people'
+import { Route as AppOrgHandleRulesMarketplaceRouteImport } from './routes/_app/$orgHandle/rules/marketplace'
+import { Route as AppOrgHandleRulesInstalledRouteImport } from './routes/_app/$orgHandle/rules/installed'
+import { Route as AppOrgHandleRulesFilesRouteImport } from './routes/_app/$orgHandle/rules/files'
 import { Route as AppOrgHandleEventsEventIdRouteImport } from './routes/_app/$orgHandle/events/$eventId'
 import { Route as AppOrgHandleAutomationsPreviewRouteImport } from './routes/_app/$orgHandle/automations/preview'
 import { Route as AppOrgHandleAutomationsAutomationIdRouteImport } from './routes/_app/$orgHandle/automations/$automationId'
@@ -256,10 +263,15 @@ const Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute =
     path: '/$',
     getParentRoute: () => Char91DotwellKnownChar93OauthAuthorizationServerRoute,
   } as any)
-const AppOrgHandleRulesIndexRoute = AppOrgHandleRulesIndexRouteImport.update({
-  id: '/rules/',
-  path: '/rules/',
+const AppOrgHandleRulesRouteRoute = AppOrgHandleRulesRouteRouteImport.update({
+  id: '/rules',
+  path: '/rules',
   getParentRoute: () => AppOrgHandleRoute,
+} as any)
+const AppOrgHandleRulesIndexRoute = AppOrgHandleRulesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppOrgHandleRulesRouteRoute,
 } as any)
 const AppOrgHandleEventsIndexRoute = AppOrgHandleEventsIndexRouteImport.update({
   id: '/events/',
@@ -272,6 +284,40 @@ const AppOrgHandleAutomationsIndexRoute =
     path: '/automations/',
     getParentRoute: () => AppOrgHandleRoute,
   } as any)
+const AppOrgHandleRulesWorkflowsRoute =
+  AppOrgHandleRulesWorkflowsRouteImport.update({
+    id: '/workflows',
+    path: '/workflows',
+    getParentRoute: () => AppOrgHandleRulesRouteRoute,
+  } as any)
+const AppOrgHandleRulesRequestsRoute =
+  AppOrgHandleRulesRequestsRouteImport.update({
+    id: '/requests',
+    path: '/requests',
+    getParentRoute: () => AppOrgHandleRulesRouteRoute,
+  } as any)
+const AppOrgHandleRulesPeopleRoute = AppOrgHandleRulesPeopleRouteImport.update({
+  id: '/people',
+  path: '/people',
+  getParentRoute: () => AppOrgHandleRulesRouteRoute,
+} as any)
+const AppOrgHandleRulesMarketplaceRoute =
+  AppOrgHandleRulesMarketplaceRouteImport.update({
+    id: '/marketplace',
+    path: '/marketplace',
+    getParentRoute: () => AppOrgHandleRulesRouteRoute,
+  } as any)
+const AppOrgHandleRulesInstalledRoute =
+  AppOrgHandleRulesInstalledRouteImport.update({
+    id: '/installed',
+    path: '/installed',
+    getParentRoute: () => AppOrgHandleRulesRouteRoute,
+  } as any)
+const AppOrgHandleRulesFilesRoute = AppOrgHandleRulesFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
+  getParentRoute: () => AppOrgHandleRulesRouteRoute,
+} as any)
 const AppOrgHandleEventsEventIdRoute =
   AppOrgHandleEventsEventIdRouteImport.update({
     id: '/events/$eventId',
@@ -292,15 +338,15 @@ const AppOrgHandleAutomationsAutomationIdRoute =
   } as any)
 const AppOrgHandleRulesCustomIndexRoute =
   AppOrgHandleRulesCustomIndexRouteImport.update({
-    id: '/rules/custom/',
-    path: '/rules/custom/',
-    getParentRoute: () => AppOrgHandleRoute,
+    id: '/custom/',
+    path: '/custom/',
+    getParentRoute: () => AppOrgHandleRulesRouteRoute,
   } as any)
 const AppOrgHandleRulesCustomRuleIdRoute =
   AppOrgHandleRulesCustomRuleIdRouteImport.update({
-    id: '/rules/custom/$ruleId',
-    path: '/rules/custom/$ruleId',
-    getParentRoute: () => AppOrgHandleRoute,
+    id: '/custom/$ruleId',
+    path: '/custom/$ruleId',
+    getParentRoute: () => AppOrgHandleRulesRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -320,6 +366,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/api/mcp': typeof ApiMcpRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/$orgHandle/rules': typeof AppOrgHandleRulesRouteRouteWithChildren
   '/.well-known/oauth-authorization-server/$': typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
   '/.well-known/oauth-protected-resource/$': typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
   '/$orgHandle/home': typeof AppOrgHandleHomeRoute
@@ -345,6 +392,12 @@ export interface FileRoutesByFullPath {
   '/$orgHandle/automations/$automationId': typeof AppOrgHandleAutomationsAutomationIdRoute
   '/$orgHandle/automations/preview': typeof AppOrgHandleAutomationsPreviewRoute
   '/$orgHandle/events/$eventId': typeof AppOrgHandleEventsEventIdRoute
+  '/$orgHandle/rules/files': typeof AppOrgHandleRulesFilesRoute
+  '/$orgHandle/rules/installed': typeof AppOrgHandleRulesInstalledRoute
+  '/$orgHandle/rules/marketplace': typeof AppOrgHandleRulesMarketplaceRoute
+  '/$orgHandle/rules/people': typeof AppOrgHandleRulesPeopleRoute
+  '/$orgHandle/rules/requests': typeof AppOrgHandleRulesRequestsRoute
+  '/$orgHandle/rules/workflows': typeof AppOrgHandleRulesWorkflowsRoute
   '/$orgHandle/automations/': typeof AppOrgHandleAutomationsIndexRoute
   '/$orgHandle/events/': typeof AppOrgHandleEventsIndexRoute
   '/$orgHandle/rules/': typeof AppOrgHandleRulesIndexRoute
@@ -393,6 +446,12 @@ export interface FileRoutesByTo {
   '/$orgHandle/automations/$automationId': typeof AppOrgHandleAutomationsAutomationIdRoute
   '/$orgHandle/automations/preview': typeof AppOrgHandleAutomationsPreviewRoute
   '/$orgHandle/events/$eventId': typeof AppOrgHandleEventsEventIdRoute
+  '/$orgHandle/rules/files': typeof AppOrgHandleRulesFilesRoute
+  '/$orgHandle/rules/installed': typeof AppOrgHandleRulesInstalledRoute
+  '/$orgHandle/rules/marketplace': typeof AppOrgHandleRulesMarketplaceRoute
+  '/$orgHandle/rules/people': typeof AppOrgHandleRulesPeopleRoute
+  '/$orgHandle/rules/requests': typeof AppOrgHandleRulesRequestsRoute
+  '/$orgHandle/rules/workflows': typeof AppOrgHandleRulesWorkflowsRoute
   '/$orgHandle/automations': typeof AppOrgHandleAutomationsIndexRoute
   '/$orgHandle/events': typeof AppOrgHandleEventsIndexRoute
   '/$orgHandle/rules': typeof AppOrgHandleRulesIndexRoute
@@ -418,6 +477,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/api/mcp': typeof ApiMcpRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/_app/$orgHandle/rules': typeof AppOrgHandleRulesRouteRouteWithChildren
   '/.well-known/oauth-authorization-server/$': typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
   '/.well-known/oauth-protected-resource/$': typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
   '/_app/$orgHandle/home': typeof AppOrgHandleHomeRoute
@@ -443,6 +503,12 @@ export interface FileRoutesById {
   '/_app/$orgHandle/automations/$automationId': typeof AppOrgHandleAutomationsAutomationIdRoute
   '/_app/$orgHandle/automations/preview': typeof AppOrgHandleAutomationsPreviewRoute
   '/_app/$orgHandle/events/$eventId': typeof AppOrgHandleEventsEventIdRoute
+  '/_app/$orgHandle/rules/files': typeof AppOrgHandleRulesFilesRoute
+  '/_app/$orgHandle/rules/installed': typeof AppOrgHandleRulesInstalledRoute
+  '/_app/$orgHandle/rules/marketplace': typeof AppOrgHandleRulesMarketplaceRoute
+  '/_app/$orgHandle/rules/people': typeof AppOrgHandleRulesPeopleRoute
+  '/_app/$orgHandle/rules/requests': typeof AppOrgHandleRulesRequestsRoute
+  '/_app/$orgHandle/rules/workflows': typeof AppOrgHandleRulesWorkflowsRoute
   '/_app/$orgHandle/automations/': typeof AppOrgHandleAutomationsIndexRoute
   '/_app/$orgHandle/events/': typeof AppOrgHandleEventsIndexRoute
   '/_app/$orgHandle/rules/': typeof AppOrgHandleRulesIndexRoute
@@ -468,6 +534,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/mcp'
     | '/oauth/consent'
+    | '/$orgHandle/rules'
     | '/.well-known/oauth-authorization-server/$'
     | '/.well-known/oauth-protected-resource/$'
     | '/$orgHandle/home'
@@ -493,6 +560,12 @@ export interface FileRouteTypes {
     | '/$orgHandle/automations/$automationId'
     | '/$orgHandle/automations/preview'
     | '/$orgHandle/events/$eventId'
+    | '/$orgHandle/rules/files'
+    | '/$orgHandle/rules/installed'
+    | '/$orgHandle/rules/marketplace'
+    | '/$orgHandle/rules/people'
+    | '/$orgHandle/rules/requests'
+    | '/$orgHandle/rules/workflows'
     | '/$orgHandle/automations/'
     | '/$orgHandle/events/'
     | '/$orgHandle/rules/'
@@ -541,6 +614,12 @@ export interface FileRouteTypes {
     | '/$orgHandle/automations/$automationId'
     | '/$orgHandle/automations/preview'
     | '/$orgHandle/events/$eventId'
+    | '/$orgHandle/rules/files'
+    | '/$orgHandle/rules/installed'
+    | '/$orgHandle/rules/marketplace'
+    | '/$orgHandle/rules/people'
+    | '/$orgHandle/rules/requests'
+    | '/$orgHandle/rules/workflows'
     | '/$orgHandle/automations'
     | '/$orgHandle/events'
     | '/$orgHandle/rules'
@@ -565,6 +644,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/mcp'
     | '/oauth/consent'
+    | '/_app/$orgHandle/rules'
     | '/.well-known/oauth-authorization-server/$'
     | '/.well-known/oauth-protected-resource/$'
     | '/_app/$orgHandle/home'
@@ -590,6 +670,12 @@ export interface FileRouteTypes {
     | '/_app/$orgHandle/automations/$automationId'
     | '/_app/$orgHandle/automations/preview'
     | '/_app/$orgHandle/events/$eventId'
+    | '/_app/$orgHandle/rules/files'
+    | '/_app/$orgHandle/rules/installed'
+    | '/_app/$orgHandle/rules/marketplace'
+    | '/_app/$orgHandle/rules/people'
+    | '/_app/$orgHandle/rules/requests'
+    | '/_app/$orgHandle/rules/workflows'
     | '/_app/$orgHandle/automations/'
     | '/_app/$orgHandle/events/'
     | '/_app/$orgHandle/rules/'
@@ -893,12 +979,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRouteImport
       parentRoute: typeof Char91DotwellKnownChar93OauthAuthorizationServerRoute
     }
+    '/_app/$orgHandle/rules': {
+      id: '/_app/$orgHandle/rules'
+      path: '/rules'
+      fullPath: '/$orgHandle/rules'
+      preLoaderRoute: typeof AppOrgHandleRulesRouteRouteImport
+      parentRoute: typeof AppOrgHandleRoute
+    }
     '/_app/$orgHandle/rules/': {
       id: '/_app/$orgHandle/rules/'
-      path: '/rules'
+      path: '/'
       fullPath: '/$orgHandle/rules/'
       preLoaderRoute: typeof AppOrgHandleRulesIndexRouteImport
-      parentRoute: typeof AppOrgHandleRoute
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
     }
     '/_app/$orgHandle/events/': {
       id: '/_app/$orgHandle/events/'
@@ -913,6 +1006,48 @@ declare module '@tanstack/react-router' {
       fullPath: '/$orgHandle/automations/'
       preLoaderRoute: typeof AppOrgHandleAutomationsIndexRouteImport
       parentRoute: typeof AppOrgHandleRoute
+    }
+    '/_app/$orgHandle/rules/workflows': {
+      id: '/_app/$orgHandle/rules/workflows'
+      path: '/workflows'
+      fullPath: '/$orgHandle/rules/workflows'
+      preLoaderRoute: typeof AppOrgHandleRulesWorkflowsRouteImport
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
+    }
+    '/_app/$orgHandle/rules/requests': {
+      id: '/_app/$orgHandle/rules/requests'
+      path: '/requests'
+      fullPath: '/$orgHandle/rules/requests'
+      preLoaderRoute: typeof AppOrgHandleRulesRequestsRouteImport
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
+    }
+    '/_app/$orgHandle/rules/people': {
+      id: '/_app/$orgHandle/rules/people'
+      path: '/people'
+      fullPath: '/$orgHandle/rules/people'
+      preLoaderRoute: typeof AppOrgHandleRulesPeopleRouteImport
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
+    }
+    '/_app/$orgHandle/rules/marketplace': {
+      id: '/_app/$orgHandle/rules/marketplace'
+      path: '/marketplace'
+      fullPath: '/$orgHandle/rules/marketplace'
+      preLoaderRoute: typeof AppOrgHandleRulesMarketplaceRouteImport
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
+    }
+    '/_app/$orgHandle/rules/installed': {
+      id: '/_app/$orgHandle/rules/installed'
+      path: '/installed'
+      fullPath: '/$orgHandle/rules/installed'
+      preLoaderRoute: typeof AppOrgHandleRulesInstalledRouteImport
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
+    }
+    '/_app/$orgHandle/rules/files': {
+      id: '/_app/$orgHandle/rules/files'
+      path: '/files'
+      fullPath: '/$orgHandle/rules/files'
+      preLoaderRoute: typeof AppOrgHandleRulesFilesRouteImport
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
     }
     '/_app/$orgHandle/events/$eventId': {
       id: '/_app/$orgHandle/events/$eventId'
@@ -937,22 +1072,53 @@ declare module '@tanstack/react-router' {
     }
     '/_app/$orgHandle/rules/custom/': {
       id: '/_app/$orgHandle/rules/custom/'
-      path: '/rules/custom'
+      path: '/custom'
       fullPath: '/$orgHandle/rules/custom/'
       preLoaderRoute: typeof AppOrgHandleRulesCustomIndexRouteImport
-      parentRoute: typeof AppOrgHandleRoute
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
     }
     '/_app/$orgHandle/rules/custom/$ruleId': {
       id: '/_app/$orgHandle/rules/custom/$ruleId'
-      path: '/rules/custom/$ruleId'
+      path: '/custom/$ruleId'
       fullPath: '/$orgHandle/rules/custom/$ruleId'
       preLoaderRoute: typeof AppOrgHandleRulesCustomRuleIdRouteImport
-      parentRoute: typeof AppOrgHandleRoute
+      parentRoute: typeof AppOrgHandleRulesRouteRoute
     }
   }
 }
 
+interface AppOrgHandleRulesRouteRouteChildren {
+  AppOrgHandleRulesFilesRoute: typeof AppOrgHandleRulesFilesRoute
+  AppOrgHandleRulesInstalledRoute: typeof AppOrgHandleRulesInstalledRoute
+  AppOrgHandleRulesMarketplaceRoute: typeof AppOrgHandleRulesMarketplaceRoute
+  AppOrgHandleRulesPeopleRoute: typeof AppOrgHandleRulesPeopleRoute
+  AppOrgHandleRulesRequestsRoute: typeof AppOrgHandleRulesRequestsRoute
+  AppOrgHandleRulesWorkflowsRoute: typeof AppOrgHandleRulesWorkflowsRoute
+  AppOrgHandleRulesIndexRoute: typeof AppOrgHandleRulesIndexRoute
+  AppOrgHandleRulesCustomRuleIdRoute: typeof AppOrgHandleRulesCustomRuleIdRoute
+  AppOrgHandleRulesCustomIndexRoute: typeof AppOrgHandleRulesCustomIndexRoute
+}
+
+const AppOrgHandleRulesRouteRouteChildren: AppOrgHandleRulesRouteRouteChildren =
+  {
+    AppOrgHandleRulesFilesRoute: AppOrgHandleRulesFilesRoute,
+    AppOrgHandleRulesInstalledRoute: AppOrgHandleRulesInstalledRoute,
+    AppOrgHandleRulesMarketplaceRoute: AppOrgHandleRulesMarketplaceRoute,
+    AppOrgHandleRulesPeopleRoute: AppOrgHandleRulesPeopleRoute,
+    AppOrgHandleRulesRequestsRoute: AppOrgHandleRulesRequestsRoute,
+    AppOrgHandleRulesWorkflowsRoute: AppOrgHandleRulesWorkflowsRoute,
+    AppOrgHandleRulesIndexRoute: AppOrgHandleRulesIndexRoute,
+    AppOrgHandleRulesCustomRuleIdRoute: AppOrgHandleRulesCustomRuleIdRoute,
+    AppOrgHandleRulesCustomIndexRoute: AppOrgHandleRulesCustomIndexRoute,
+  }
+
+const AppOrgHandleRulesRouteRouteWithChildren =
+  AppOrgHandleRulesRouteRoute._addFileChildren(
+    AppOrgHandleRulesRouteRouteChildren,
+  )
+
 interface AppOrgHandleRouteChildren {
+  AppOrgHandleRulesRouteRoute: typeof AppOrgHandleRulesRouteRouteWithChildren
   AppOrgHandleHomeRoute: typeof AppOrgHandleHomeRoute
   AppOrgHandleInsightsRoute: typeof AppOrgHandleInsightsRoute
   AppOrgHandleIntegrationsRoute: typeof AppOrgHandleIntegrationsRoute
@@ -961,12 +1127,10 @@ interface AppOrgHandleRouteChildren {
   AppOrgHandleEventsEventIdRoute: typeof AppOrgHandleEventsEventIdRoute
   AppOrgHandleAutomationsIndexRoute: typeof AppOrgHandleAutomationsIndexRoute
   AppOrgHandleEventsIndexRoute: typeof AppOrgHandleEventsIndexRoute
-  AppOrgHandleRulesIndexRoute: typeof AppOrgHandleRulesIndexRoute
-  AppOrgHandleRulesCustomRuleIdRoute: typeof AppOrgHandleRulesCustomRuleIdRoute
-  AppOrgHandleRulesCustomIndexRoute: typeof AppOrgHandleRulesCustomIndexRoute
 }
 
 const AppOrgHandleRouteChildren: AppOrgHandleRouteChildren = {
+  AppOrgHandleRulesRouteRoute: AppOrgHandleRulesRouteRouteWithChildren,
   AppOrgHandleHomeRoute: AppOrgHandleHomeRoute,
   AppOrgHandleInsightsRoute: AppOrgHandleInsightsRoute,
   AppOrgHandleIntegrationsRoute: AppOrgHandleIntegrationsRoute,
@@ -976,9 +1140,6 @@ const AppOrgHandleRouteChildren: AppOrgHandleRouteChildren = {
   AppOrgHandleEventsEventIdRoute: AppOrgHandleEventsEventIdRoute,
   AppOrgHandleAutomationsIndexRoute: AppOrgHandleAutomationsIndexRoute,
   AppOrgHandleEventsIndexRoute: AppOrgHandleEventsIndexRoute,
-  AppOrgHandleRulesIndexRoute: AppOrgHandleRulesIndexRoute,
-  AppOrgHandleRulesCustomRuleIdRoute: AppOrgHandleRulesCustomRuleIdRoute,
-  AppOrgHandleRulesCustomIndexRoute: AppOrgHandleRulesCustomIndexRoute,
 }
 
 const AppOrgHandleRouteWithChildren = AppOrgHandleRoute._addFileChildren(

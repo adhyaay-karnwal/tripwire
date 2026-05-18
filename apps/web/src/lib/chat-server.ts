@@ -185,7 +185,14 @@ export function sanitizeMessages(rawMessages: ChatHistoryMessage[], tools?: Tool
 		});
 	}
 
+	stripIncompleteAssistantToolsBeforeUserTurn(result);
+
 	return result
+		.filter((msg: any) => {
+			if (msg === null) return false;
+			if (msg.parts && msg.parts.length === 0) return false;
+			return true;
+		})
 		.map((msg: any) => normalizeMessageForAiSdk(msg, tools))
 		.filter((msg: UIMessage | null): msg is UIMessage => !!msg && msg.parts.length > 0);
 }
@@ -259,6 +266,20 @@ function normalizeParts(parts: any[], tools?: ToolSet): any[] {
 	}
 
 	return normalized;
+}
+
+function stripIncompleteAssistantToolsBeforeUserTurn(messages: any[]): void {
+	for (let i = 0; i < messages.length - 1; i++) {
+		const cur = messages[i];
+		const next = messages[i + 1];
+		if (cur.role !== "assistant" || next.role !== "user" || !Array.isArray(cur.parts)) continue;
+
+		cur.parts = cur.parts.filter((part: any) => {
+			if (!isAiSdkToolPart(part)) return true;
+			const s = part.state;
+			return s === "output-available" || s === "output-error" || s === "output-denied";
+		});
+	}
 }
 
 function cloneMessage(message: ChatHistoryMessage): any {

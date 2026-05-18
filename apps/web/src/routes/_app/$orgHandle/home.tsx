@@ -161,9 +161,9 @@ function HomePage() {
 					const enabledRules = rulesCountQuery.data?.enabled ?? 0;
 					const steps = [
 						{ done: true, label: "Connect a repository", to: integrationsPath },
-						{ done: enabledRules > 0, label: "Enable moderation rules", to: `${rulesPath}?tab=marketplace` },
-						{ done: false, label: "Add trusted contributors to allowlist", to: `${rulesPath}?tab=people` },
-						{ done: false, label: "Set up repo files (RULES.md, AGENTS.md)", to: `${rulesPath}?tab=files` },
+						{ done: enabledRules > 0, label: "Enable moderation rules", to: `${rulesPath}/marketplace` },
+						{ done: false, label: "Add trusted contributors to allowlist", to: `${rulesPath}/people` },
+						{ done: false, label: "Set up repo files (RULES.md, AGENTS.md)", to: `${rulesPath}/files` },
 					];
 					return (
 						<div className="w-full flex flex-col gap-3 mt-2">
