@@ -287,9 +287,9 @@ function UserProfilePage() {
 								return (
 									<Link
 										key={event.id}
-										to="/$orgHandle/events/$eventId"
-										params={{ orgHandle: org?.slug ?? "", eventId: event.id }}
-										className="rounded-[10px] bg-tw-inner px-3 py-2.5 flex items-center gap-3 hover:bg-tw-hover transition-colors"
+										to={org?.slug ? "/$orgHandle/events/$eventId" : "#"}
+										params={org?.slug ? { orgHandle: org.slug, eventId: event.id } : { orgHandle: "_", eventId: event.id }}
+										className={`rounded-[10px] bg-tw-inner px-3 py-2.5 flex items-center gap-3 ${org?.slug ? "hover:bg-tw-hover transition-colors" : "pointer-events-none"}`}
 									>
 										<span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: sevColor }} />
 										<div className="flex-1 min-w-0">

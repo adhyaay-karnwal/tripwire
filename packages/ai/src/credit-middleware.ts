@@ -73,19 +73,21 @@ export async function trackCreditUsage({
 
 	if (cents === 0) return;
 
-	autumn.track({
-		customerId,
-		featureId: "ai_credits",
-		value: cents,
-		properties: {
-			model: modelId,
-			repoId,
-			promptTokens,
-			completionTokens,
-		},
-	}).catch((err) => {
+	try {
+		await autumn.track({
+			customerId,
+			featureId: "ai_credits",
+			value: cents,
+			properties: {
+				model: modelId,
+				repoId,
+				promptTokens,
+				completionTokens,
+			},
+		});
+	} catch (err) {
 		console.error("[billing] Failed to track usage:", err);
-	});
+	}
 }
 
 export function logCreditUsageError({

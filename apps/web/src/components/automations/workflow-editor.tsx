@@ -49,7 +49,7 @@ const paletteGroups: { title: string; items: PaletteItem[] }[] = [
 		title: "Rules",
 		items: RULE_KEYS.filter((key) => !HIDDEN_RULES.has(key)).map((key) => ({
 			type: "rule",
-			label: ruleLabels[key],
+			label: ruleLabels[key] ?? key,
 			sublabel: "Pass / Fail check",
 			color: nodeColors.rule,
 			data: { rule: key, params: {} },

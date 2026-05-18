@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useRef, type KeyboardEvent } from "react";
+import { useState, useRef, useEffect, type KeyboardEvent } from "react";
 import { ChatThread } from "#/components/chat/chat-thread";
 import { usePersistedChat } from "#/components/chat/use-persisted-chat";
 import { useWorkspace } from "#/lib/workspace-context";
@@ -36,17 +36,12 @@ function ChatPage() {
 		repoId: convQuery.data?.repoId ?? repo?.id,
 	});
 
-	// Auto-send initial message (only on first navigation from home, not refresh)
 	const didSendInitial = useRef(false);
-	if (
-		initialMessage &&
-		!didSendInitial.current &&
-		!convQuery.isPending &&
-		chat.messages.length === 0
-	) {
+	useEffect(() => {
+		if (!initialMessage || didSendInitial.current || convQuery.isPending || chat.messages.length > 0) return;
 		didSendInitial.current = true;
-		queueMicrotask(() => chat.sendMessage(initialMessage));
-	}
+		void chat.sendMessage(initialMessage);
+	}, [initialMessage, convQuery.isPending, chat.messages.length, chat.sendMessage]);
 
 	const [inputValue, setInputValue] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);

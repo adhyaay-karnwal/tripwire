@@ -4,8 +4,12 @@ import type { ActionResultData } from "#/types/chat";
 
 export function getPartKey(part: MessagePart, messageId: string, index?: number): string {
 	const mid = messageId || "msg";
-	if (isToolPart(part)) return getToolCallId(part) ?? `${mid}-tool-${index ?? 0}`;
-	if (part.type === "tool-result") return `${mid}-result-${part.toolCallId ?? part.id ?? index ?? 0}`;
+	if (part.type === "tool-result") {
+		return `${mid}-tool-result-${part.toolCallId ?? part.id ?? index ?? 0}`;
+	}
+	if (isToolPart(part)) {
+		return `${mid}-tool-call-${getToolCallId(part) ?? index ?? 0}`;
+	}
 	return `${mid}-${part.type}-${index ?? 0}`;
 }
 
