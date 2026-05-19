@@ -127,6 +127,7 @@ const listEvents = defineTool({
   name: "list_events",
   description:
     "List recent moderation events for the current repo (newest first). Filterable by username, action, severity.",
+  directInvokable: true,
   inputSchema: z.object({
     username: z.string().optional(),
     action: z.string().optional(),
@@ -490,6 +491,7 @@ const lookupUser = defineTool({
   name: "lookup_user",
   description:
     "Look up a GitHub user's profile and their Tripwire activity history for the current repo. Pass the username without @.",
+  directInvokable: true,
   inputSchema: z.object({ username: z.string().min(1) }),
   handler: async ({ username }, ctx) => {
     const repoId = requireRepoId(ctx)

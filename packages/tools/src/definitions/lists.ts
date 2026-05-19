@@ -77,6 +77,7 @@ const fmtDate = (d: Date) =>
 const listLists = defineTool({
   name: "list_lists",
   description: "Return both the whitelist and blacklist for the current repo.",
+  directInvokable: true,
   inputSchema: z.object({}),
   handler: async (_args, ctx) => {
     const repoId = requireRepoId(ctx)
@@ -169,6 +170,7 @@ const checkLists = defineTool({
   name: "check_lists",
   description:
     "Check whether a SPECIFIC user is on the whitelist or blacklist. Use this when the user asks about one person; use list_lists for a full overview.",
+  directInvokable: true,
   inputSchema: z.object({ username: z.string().min(1) }),
   handler: async ({ username }, ctx) => {
     const repoId = requireRepoId(ctx)
