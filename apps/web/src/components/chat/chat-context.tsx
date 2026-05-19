@@ -3,7 +3,6 @@ import {
   useContext,
   useState,
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   type ReactNode,
@@ -50,7 +49,7 @@ interface ChatContextValue {
   close: () => void
   toggle: () => void
   clearChat: () => void
-  loadChat: (chatId: string, messages: UIMessage[]) => void
+  loadChat: (chatId: string) => void
   newChat: () => string
   setWorkflowContext: (ctx: WorkflowContext | null) => void
   appendOptimisticMessage: (message: UIMessage) => void
@@ -72,7 +71,7 @@ const defaultContextValue: ChatContextValue = {
   close: () => {},
   toggle: () => {},
   clearChat: () => {},
-  loadChat: () => {},
+  loadChat: () => void 0,
   newChat: () => "",
   setWorkflowContext: () => {},
   appendOptimisticMessage: () => {},
@@ -193,10 +192,8 @@ function ChatProviderClient({ children }: ChatProviderProps) {
     setMessages,
     error: chatHookError,
   } = useChat<UIMessage>({
-    // Stable id per conversation — composite ids recreated Chat when
-    // convQuery refetched after save and could abort in-flight streams.
     id: conversationId,
-    messages: [],
+    messages: persistedMessages,
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onError: (error) => {
@@ -242,23 +239,6 @@ function ChatProviderClient({ children }: ChatProviderProps) {
     },
   })
   const isLoading = status === "submitted" || status === "streaming"
-
-  // Hydrate from server when opening a stored conversation (not mid-send).
-  // Check isFetching instead of isPending so cache hits hydrate immediately
-  // even when the query key just changed (e.g. after loadChat).
-  useEffect(() => {
-    if (convQuery.isFetching && !convQuery.data) return
-    if (persistedMessages.length === 0) return
-    if (messages.length > 0) return
-    setMessages(persistedMessages)
-  }, [
-    conversationId,
-    convQuery.isFetching,
-    convQuery.data,
-    persistedMessages,
-    messages.length,
-    setMessages,
-  ])
 
   // Combine hook error with our custom error state
   const combinedError = chatError || chatHookError || null
@@ -336,17 +316,15 @@ function ChatProviderClient({ children }: ChatProviderProps) {
   )
 
   const loadChat = useCallback(
-    (chatId: string, msgs: UIMessage[]) => {
+    (chatId: string) => {
       setChatError(null)
       setConversationId(chatId)
       setStoredValue(STORAGE_KEY_CONV, chatId)
       createdConvIds.current.add(chatId)
-      setMessages(msgs)
 
       // Pin the chat to its stored repo so subsequent sends target that
-      // repo even if the user switches workspace. The persisted chat row
-      // is fetched via the same trpc.chats.get query the caller already
-      // invoked, so it's cached and read synchronously here.
+      // repo even if the user switches workspace. The caller should have
+      // already fetched the chat into the query cache before calling this.
       const cached = queryClient.getQueryData(
         trpc.chats.get.queryKey({ chatId })
       ) as { repoId: string | null } | undefined
@@ -358,12 +336,10 @@ function ChatProviderClient({ children }: ChatProviderProps) {
           if (target) setRepo(target)
         }
       } else {
-        // Legacy chat with no recorded repo; keep using the live
-        // workspace repo (no pinning).
         setPinnedRepoId(null)
       }
     },
-    [setMessages, queryClient, trpc.chats.get, repo?.id, repos, setRepo]
+    [queryClient, trpc.chats.get, repo?.id, repos, setRepo]
   )
 
   const newChat = useCallback(() => {

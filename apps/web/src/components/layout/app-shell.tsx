@@ -19,7 +19,6 @@ import { Button } from "#/components/ui/button"
 import { ChatComposer } from "#/components/chat/chat-composer"
 import { ChatThread } from "#/components/chat/chat-thread"
 import { useTRPC } from "#/integrations/trpc/react"
-import { UnicodeSpinner } from "#/components/ui/unicode-spinner"
 import { useCustomer } from "autumn-js/react"
 import { useRequestNotifications } from "#/lib/use-request-notifications"
 import Dither from "#/components/Dither"
@@ -45,7 +44,6 @@ import {
 import { ExpandChatIcon14 } from "#/components/icons/expand-chat-icon"
 import { TripwireLogo } from "../icons/tripwire-logo"
 import { routes } from "#/lib/routes"
-import { uiMessagesFromStored } from "#/lib/conversation-stored"
 
 export function AppShell() {
   return (
@@ -380,8 +378,7 @@ function CreditBalancePill() {
 function SidebarRecentChats() {
   const trpc = useTRPC()
   const queryClient = useQueryClient()
-  const { loadChat, open } = useAIChat()
-  const [loadingId, setLoadingId] = useState<string | null>(null)
+  const { loadChat, conversationId, open } = useAIChat()
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const { repo } = useWorkspace()
   const chatsQuery = useQuery(
@@ -396,7 +393,6 @@ function SidebarRecentChats() {
         setConfirmDeleteId(null)
         await queryClient.cancelQueries({ queryKey: listQueryKey })
         const previous = queryClient.getQueryData(listQueryKey)
-        await new Promise((r) => setTimeout(r, 300))
         queryClient.setQueryData(
           listQueryKey,
           (old: typeof chats | undefined) =>
@@ -415,33 +411,19 @@ function SidebarRecentChats() {
     })
   )
 
-  const handleLoadChat = async (chatId: string) => {
-    setLoadingId(chatId)
-    try {
-      const conv = await queryClient.fetchQuery(
-        trpc.chats.get.queryOptions({ chatId })
-      )
-      if (conv?.messages) {
-        loadChat(chatId, uiMessagesFromStored(conv.messages))
-        open()
-      }
-    } finally {
-      setLoadingId(null)
-    }
-  }
-
   if (chats.length === 0) return null
 
   return (
-    <div className="shrink-0 px-2 pb-1">
-      <div className="mb-1 flex items-center justify-between px-1">
+    <div className="relative shrink-0 px-3 py-1">
+      <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-[#17171a] to-transparent" />
+      <div className="mb-0.5">
         <span className="text-[11px] font-medium tracking-wider text-tw-text-muted uppercase">
           Recent
         </span>
       </div>
       <AnimatePresence initial={false}>
         {chats.map((chat) => {
-          const isLoading = loadingId === chat.id
+          const isActive = chat.id === conversationId
           const isConfirming = confirmDeleteId === chat.id
 
           if (isConfirming) {
@@ -452,26 +434,26 @@ function SidebarRecentChats() {
                 transition={{
                   layout: { duration: 0.25, ease: [0.25, 1, 0.5, 1] },
                 }}
-                className="flex w-full items-center gap-2 rounded-lg bg-tw-hover px-1.5 py-1.5"
+                className="flex items-center gap-2 py-1"
               >
                 <span className="flex-1 truncate text-[12px] text-tw-text-secondary">
-                  Delete this chat?
+                  Delete?
                 </span>
                 <Button
                   variant="ghost"
                   type="button"
                   onClick={() => deleteChat.mutate({ chatId: chat.id })}
-                  className="px-1 text-[11px] font-medium text-red-400 transition-colors hover:text-red-300"
+                  className="px-0 text-[11px] font-medium text-red-400"
                 >
-                  Delete
+                  Yes
                 </Button>
                 <Button
                   variant="ghost"
                   type="button"
                   onClick={() => setConfirmDeleteId(null)}
-                  className="px-1 text-[11px] font-medium text-tw-text-muted transition-colors hover:text-tw-text-secondary"
+                  className="px-0 text-[11px] font-medium text-tw-text-muted"
                 >
-                  Cancel
+                  No
                 </Button>
               </motion.div>
             )
@@ -481,59 +463,42 @@ function SidebarRecentChats() {
             <motion.div
               key={chat.id}
               layout
-              exit={{
-                opacity: 0,
-                height: 0,
-                marginTop: 0,
-                marginBottom: 0,
-                overflow: "hidden",
-              }}
+              exit={{ opacity: 0, height: 0, overflow: "hidden" }}
               transition={{
-                layout: { duration: 0.25, ease: [0.25, 1, 0.5, 1] },
-                duration: 0.2,
-                ease: [0.25, 1, 0.5, 1],
+                layout: { duration: 0.2, ease: [0.25, 1, 0.5, 1] },
+                duration: 0.15,
               }}
-              className={`group flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left ${
-                isLoading ? "bg-tw-hover" : "hover:bg-tw-hover"
-              }`}
+              className="group flex items-center gap-1.5 py-2"
             >
-              <Button
-                variant="ghost"
+              {/* biome-ignore lint/correctness/noRestrictedElements: needed here because ui breaks without... todo: fix???? */}
+              <button
                 type="button"
-                disabled={loadingId !== null}
-                onClick={() => handleLoadChat(chat.id)}
-                className="flex min-w-0 flex-1 items-center justify-start gap-2 disabled:opacity-50"
+                onClick={() => {
+                  if (isActive) return
+                  queryClient.prefetchQuery(
+                    trpc.chats.get.queryOptions({ chatId: chat.id })
+                  )
+                  loadChat(chat.id)
+                  open()
+                }}
+                className="flex min-w-0 flex-1 items-center gap-1.5"
               >
-                {isLoading ? (
-                  <UnicodeSpinner
-                    variant="dots"
-                    className="text-[12px] text-tw-text-secondary"
-                    label="Loading chat"
-                  />
-                ) : (
-                  <ChatBubbleOutlineIcon12 className="shrink-0 text-tw-text-muted" />
-                )}
-                <span
-                  className={`truncate text-[12px] transition-colors duration-200 ${
-                    isLoading
-                      ? "text-tw-text-primary"
-                      : "text-tw-text-secondary"
-                  }`}
-                >
+                <ChatBubbleOutlineIcon12 className={`shrink-0 ${isActive ? "text-tw-text-primary" : "text-tw-text-muted"}`} />
+                <span className={`truncate text-[12px] ${isActive ? "text-tw-text-primary" : "text-tw-text-muted"}`}>
                   {chat.title ?? "New chat"}
                 </span>
-              </Button>
-              <Button
-                variant="ghost"
+              </button>
+              {/* biome-ignore lint/correctness/noRestrictedElements: needed here because ui breaks without... todo: fix???? */}
+              <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
                   setConfirmDeleteId(chat.id)
                 }}
-                className="flex size-5 shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100 hover:bg-[#FAFAFA10]"
+                className="shrink-0 opacity-0 group-hover:opacity-100"
               >
                 <StrokeXIcon10Muted />
-              </Button>
+              </button>
             </motion.div>
           )
         })}
