@@ -413,7 +413,7 @@ describe("vouchedUsersOnly", () => {
   })
 
   it("allows globally vouched users with scope=both", () => {
-    const vouchScope = "both"
+    const vouchScope: string = "both"
     const isGloballyVouched = true
     const passed =
       (vouchScope === "global" || vouchScope === "both") && isGloballyVouched
@@ -423,7 +423,7 @@ describe("vouchedUsersOnly", () => {
   it("does NOT allow globally vouched users with scope=repo", () => {
     // With scope=repo, only the whitelist matters (checked earlier).
     // If user isn't whitelisted, they fail regardless of global vouches.
-    const vouchScope = "repo"
+    const vouchScope: string = "repo"
     const isGloballyVouched = true
     const passed =
       (vouchScope === "global" || vouchScope === "both") && isGloballyVouched
