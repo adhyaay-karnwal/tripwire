@@ -23,7 +23,7 @@ import {
   fetchUserAchievements,
   githubApi,
 } from "@tripwire/github"
-import { computeContributorScore } from "@tripwire/core"
+import { computeContributorScore, logEvent } from "@tripwire/core"
 import {
   fetchWorkflowRunContext,
   simulateWorkflowDefinition,
@@ -527,6 +527,25 @@ export const workflowsRouter = {
         simulateWorkflowDefinition(wf, userData)
       )
 
+      for (const sim of results) {
+        await logEvent({
+          repoId: input.repoId,
+          action: "workflow_run",
+          severity: sim.result === "blocked" ? "warning" : "info",
+          description: `Workflow "${sim.workflowName}" report: ${sim.result} for @${input.username}`,
+          targetGithubUsername: input.username,
+          metadata: {
+            workflowId: sim.workflowId,
+            workflowName: sim.workflowName,
+            mode: "report",
+            result: sim.result,
+            nodeCount: sim.nodeCount,
+            actions: sim.actions,
+            triggeredBy: ctx.user.name ?? ctx.user.email,
+          },
+        })
+      }
+
       return {
         username: input.username,
         kind: input.kind ?? "user",
@@ -651,6 +670,24 @@ export const workflowsRouter = {
             result: { simulation: sim, userData, contentMeta, contentText },
           })
           .where(eq(workflowRuns.id, runId))
+
+        await logEvent({
+          repoId: row.repoId,
+          action: "workflow_run",
+          severity: sim.result === "blocked" ? "warning" : "info",
+          description: `Workflow "${row.name}" manual run: ${sim.result} for @${input.username}`,
+          targetGithubUsername: input.username,
+          metadata: {
+            workflowId: row.id,
+            workflowName: row.name,
+            runId,
+            mode: "manual",
+            result: sim.result,
+            nodeCount: sim.nodeCount,
+            actions: sim.actions,
+            triggeredBy: ctx.user.name ?? ctx.user.email,
+          },
+        })
 
         return {
           runId,

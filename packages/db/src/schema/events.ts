@@ -44,6 +44,8 @@ export type EventAction =
   | "rule_triggered"
   // Catch-all (renamed from issue_deleted for clarity)
   | "issue_deleted"
+  // Workflow execution
+  | "workflow_run" // a workflow was executed (manual run, simulation, or test)
   // Reputation administration
   | "score_reset" // maintainer cleared a user's contributor-score history
   | "block_cleared" // maintainer expunged a specific block (neutralizes its score impact)

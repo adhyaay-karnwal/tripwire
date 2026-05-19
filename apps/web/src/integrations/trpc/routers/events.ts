@@ -30,6 +30,7 @@ const eventActionEnum = z.enum([
   "bot_blacklisted",
   "rule_triggered",
   "score_reset",
+  "workflow_run",
 ])
 
 const severityEnum = z.enum(["info", "warning", "success", "error"])
@@ -234,6 +235,7 @@ export const eventsRouter = {
         nearMisses: counts["rule_near_miss"] ?? 0,
         whitelistBypasses: counts["whitelist_bypass"] ?? 0,
         blacklistBlocked: counts["blacklist_blocked"] ?? 0,
+        workflowRuns: counts["workflow_run"] ?? 0,
       }
     }),
 
