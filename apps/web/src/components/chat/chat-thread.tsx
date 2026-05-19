@@ -486,15 +486,21 @@ function MessagePartRenderer({
         }
 
         if (part.state === "output-available") {
+          const output = getToolOutput(part)
+          const resolved = coerceToolOutput(output)
+          const hideToolChrome = isRenderSpecPayload(resolved)
+
           return (
             <ToolResultDisplay
-              result={getToolOutput(part)}
+              result={output}
               fallback={
-                <ToolStep
-                  toolName={toolName}
-                  args={toolArgs}
-                  state={part.state}
-                />
+                hideToolChrome ? null : (
+                  <ToolStep
+                    toolName={toolName}
+                    args={toolArgs}
+                    state={part.state}
+                  />
+                )
               }
             />
           )
@@ -609,6 +615,29 @@ interface ToolStepProps {
   state: string
 }
 
+/** Tool finished with json-render output — skip collapsible ToolStep chrome. */
+function coerceToolOutput(output: unknown): unknown {
+  if (typeof output === "string") {
+    try {
+      return JSON.parse(output) as unknown
+    } catch {
+      return output
+    }
+  }
+  return output
+}
+
+function isRenderSpecPayload(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false
+  const r = value as Record<string, unknown>
+  return (
+    typeof r.root === "string" &&
+    r.elements !== undefined &&
+    typeof r.elements === "object" &&
+    r.elements !== null
+  )
+}
+
 function ToolStep({ toolName, args, state }: ToolStepProps) {
   const [isOpen, setIsOpen] = useState(false)
   const isComplete =
@@ -627,7 +656,7 @@ function ToolStep({ toolName, args, state }: ToolStepProps) {
         variant="ghost"
         type="button"
         onClick={() => hasArgs && setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 py-0.5 text-[12px] text-tw-text-muted ${hasArgs ? "cursor-pointer hover:text-[#E0E0E0]" : "cursor-default"} transition-colors`}
+        className={`flex w-full items-center justify-start gap-2 py-0.5 text-[12px] text-tw-text-muted ${hasArgs ? "cursor-pointer hover:text-[#E0E0E0]" : "cursor-default"} transition-colors`}
       >
         {isError ? (
           <ToolStepErrorRingIcon12 className="shrink-0 text-red-400/60" />
@@ -676,7 +705,7 @@ function ReasoningBlock({ content }: { content: string }) {
         variant="ghost"
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 py-0.5 text-[12px] text-tw-text-muted transition-colors hover:text-tw-text-secondary w-fit"
+        className="flex w-full items-center justify-start gap-1.5 py-0.5 text-[12px] text-tw-text-muted transition-colors hover:text-tw-text-secondary"
       >
         <ThoughtCollapsibleChevronIcon10
           className={`shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}

@@ -1,5 +1,5 @@
 import { defineRegistry, Renderer, JSONUIProvider } from "@json-render/react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "./button"
 import {
   RegistryActionErrorIcon,
@@ -9,7 +9,7 @@ import {
   RegistryStarIcon10,
 } from "./icons/registry-icons"
 import type { RenderSpec } from "./types"
-import { catalog } from "./catalog"
+import { catalog, type UserCardSlideProps } from "./catalog"
 
 /**
  * Component Registry for AI tool results
@@ -166,10 +166,7 @@ function InlineMarkdown({ text }: { text: string }) {
   return <>{parts}</>
 }
 
-export const { registry } = defineRegistry(catalog, {
-  components: {
-    // ─── User Profile Card ────────────────────────────────────────
-    UserCard: ({ props }) => {
+function UserCardInner({ props }: { props: UserCardSlideProps }) {
       const statusColor =
         props.status === "blacklisted"
           ? "text-tw-error"
@@ -250,78 +247,65 @@ export const { registry } = defineRegistry(catalog, {
             </div>
           )}
 
-          {/* Stats grid */}
-          <div className="grid grid-cols-3 gap-x-3 gap-y-1 text-[11px]">
-            <div>
-              <span className="text-tw-text-muted">Account age </span>
-              <span className="text-tw-text-secondary">{ageText}</span>
-            </div>
-            <div>
-              <span className="text-tw-text-muted">Public repos </span>
-              <span className="text-tw-text-secondary">
-                {fmtCompact(props.publicRepos)}
-              </span>
-            </div>
-            <div>
-              <span className="text-tw-text-muted">Followers </span>
-              <span className="text-tw-text-secondary">
-                {fmtCompact(props.followers)}
-              </span>
-            </div>
-            <div className="col-span-3">
-              <span className="text-tw-text-muted">Breakdown </span>
-              <span className="text-tw-text-secondary">
-                Non-fork public: {fmtCompact(props.publicNonForkRepos)}
-                <span className="text-tw-text-muted"> · </span>
-                Forks: {fmtCompact(props.publicForkRepos)}
-                <span className="text-tw-text-muted"> · </span>
-                PRs here: {fmtCompact(props.prsToThisRepo)}
-              </span>
-            </div>
-            <div className="col-span-3">
-              <span className="text-tw-text-muted">PRs </span>
-              <span className="text-tw-text-secondary">
-                {fmtCompact(props.closedPrs)} closed:{" "}
-                {fmtCompact(props.mergedPrs)} merged,{" "}
-                {fmtCompact(props.closedUnmergedPrs)} not merged
-              </span>
-            </div>
-            <div>
-              <span className="text-tw-text-muted">Contributions </span>
-              <span className="text-tw-text-secondary">
-                {fmtCompact(props.contributionsLastYear)}
-              </span>
-            </div>
-            <div>
-              <span className="text-tw-text-muted">Following </span>
-              <span className="text-tw-text-secondary">
-                {fmtCompact(props.following)}
-              </span>
-            </div>
-          </div>
+          <p className="text-[11px] leading-relaxed text-tw-text-secondary">
+            <span className="text-tw-text-muted">Age </span>
+            {ageText}
+            <span className="text-tw-text-muted"> · Repos </span>
+            {fmtCompact(props.publicRepos)}
+            <span className="text-tw-text-muted"> · Followers </span>
+            {fmtCompact(props.followers)}
+            <span className="text-tw-text-muted"> · Following </span>
+            {fmtCompact(props.following)}
+            <span className="text-tw-text-muted"> · Contributions (1y) </span>
+            {fmtCompact(props.contributionsLastYear)}
+          </p>
+          <p className="text-[11px] leading-relaxed text-tw-text-secondary">
+            <span className="text-tw-text-muted">Breakdown </span>
+            {fmtCompact(props.publicNonForkRepos)} non-fork public
+            <span className="text-tw-text-muted"> · </span>
+            {fmtCompact(props.publicForkRepos)} forks
+            <span className="text-tw-text-muted"> · </span>
+            {fmtCompact(props.prsToThisRepo)} PRs here
+            <span className="text-tw-text-muted"> · Closed PRs </span>
+            {fmtCompact(props.closedPrs)} ({fmtCompact(props.mergedPrs)} merged,{" "}
+            {fmtCompact(props.closedUnmergedPrs)} not merged)
+          </p>
 
-          {/* Event breakdown */}
           {(props.blockedCount > 0 ||
             props.allowedCount > 0 ||
             props.nearMissCount > 0) && (
-            <div className="flex items-center gap-3 text-[11px]">
-              <span className="text-tw-text-muted">Events:</span>
-              {props.allowedCount > 0 && (
-                <span className="text-tw-success">
-                  {fmtCompact(props.allowedCount)} allowed
-                </span>
-              )}
-              {props.blockedCount > 0 && (
-                <span className="text-tw-error">
-                  {fmtCompact(props.blockedCount)} blocked
-                </span>
-              )}
-              {props.nearMissCount > 0 && (
-                <span className="text-tw-warning">
-                  {fmtCompact(props.nearMissCount)} near-miss
-                </span>
-              )}
-            </div>
+            <p className="text-[11px] leading-snug text-tw-text-secondary">
+              <span className="text-tw-text-muted">Events </span>
+              {[
+                props.allowedCount > 0 ? (
+                  <span key="tw-ev-all" className="text-tw-success">
+                    {fmtCompact(props.allowedCount)} allowed
+                  </span>
+                ) : null,
+                props.blockedCount > 0 ? (
+                  <span key="tw-ev-bl" className="text-tw-error">
+                    {fmtCompact(props.blockedCount)} blocked
+                  </span>
+                ) : null,
+                props.nearMissCount > 0 ? (
+                  <span key="tw-ev-nm" className="text-tw-warning">
+                    {fmtCompact(props.nearMissCount)} near-miss
+                  </span>
+                ) : null,
+              ]
+                .filter(Boolean)
+                .flatMap((el, idx) =>
+                  idx === 0
+                    ? [el]
+                    : [
+                        <span key={`tw-ev-dot-${idx}`} className="text-tw-text-muted">
+                          {" "}
+                          ·{" "}
+                        </span>,
+                        el,
+                      ],
+                )}
+            </p>
           )}
 
           {/* Badges + Achievements */}
@@ -386,10 +370,111 @@ export const { registry } = defineRegistry(catalog, {
           </div>
 
           {/* Score breakdown affordance */}
-          <ScoreBreakdownButton username={props.username} />
+          <ScoreBreakdownButton
+            username={props.username}
+            repoId={props.repoId}
+          />
+        </div>
+      )
+}
+
+export const { registry } = defineRegistry(catalog, {
+  components: {
+    // ─── User Profile Card ────────────────────────────────────────
+    UserCard: ({ props }) => <UserCardInner props={props} />,
+
+    LookupUsersCarousel: ({ props }) => {
+      const [active, setActive] = useState(0)
+      const scrollerRef = useRef<HTMLDivElement>(null)
+      const n = props.slides.length
+
+      useEffect(() => {
+        const node = scrollerRef.current?.children.item(active)
+        node?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center",
+        })
+      }, [active])
+
+      return (
+        <div className="flex flex-col gap-2 rounded-xl bg-tw-card p-3">
+          {props.title ? (
+            <div className="text-[11px] tracking-wide text-tw-text-muted uppercase">
+              {props.title}
+            </div>
+          ) : null}
+          <div className="relative min-w-0">
+            <div
+              ref={scrollerRef}
+              className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:thin]"
+            >
+              {props.slides.map((slide) => (
+                <div
+                  key={slide.username}
+                  className="w-[min(100%,28rem)] shrink-0 snap-center"
+                >
+                  <UserCardInner props={slide} />
+                </div>
+              ))}
+            </div>
+            {n > 1 ? (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-7 px-2 text-[11px] text-tw-text-secondary"
+                    onClick={() => setActive((i) => (i <= 0 ? n - 1 : i - 1))}
+                  >
+                    ← Prev
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-7 px-2 text-[11px] text-tw-text-secondary"
+                    onClick={() => setActive((i) => (i >= n - 1 ? 0 : i + 1))}
+                  >
+                    Next →
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-1">
+                  {props.slides.map((slide, i) => (
+                    <Button
+                      key={`dot-${slide.username}`}
+                      type="button"
+                      variant="ghost"
+                      aria-label={`Show @${slide.username}`}
+                      aria-current={i === active ? "true" : undefined}
+                      className={`h-6 min-h-6 w-6 min-w-6 p-0 rounded-full ${
+                        i === active
+                          ? "bg-tw-accent"
+                          : "bg-tw-text-muted/35 hover:bg-tw-text-muted"
+                      }`}
+                      onClick={() => setActive(i)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          {props.errors != null && props.errors.length > 0 ? (
+            <div className="flex flex-col gap-1 rounded-lg border border-tw-error/20 bg-[#F56D5D0D] p-2 text-[11px]">
+              {props.errors.map((e) => (
+                <div
+                  key={`${e.username}:${e.message}`}
+                  className="text-tw-error"
+                >
+                  <span className="font-medium">@{e.username}</span>
+                  {`: ${e.message}`}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       )
     },
+
 
     // ─── Events List ──────────────────────────────────────────────
     EventsList: ({ props }) => {
@@ -517,10 +602,9 @@ export const { registry } = defineRegistry(catalog, {
       }
 
       return (
-        <div className="flex flex-col gap-3">
-          {/* Blacklist */}
+        <div className="flex flex-col gap-4 rounded-xl bg-tw-card p-3">
           {hasBlacklist && (
-            <div className="flex flex-col gap-2 rounded-xl bg-tw-card p-3">
+            <>
               <div className="flex items-center gap-1.5 text-[12px] tracking-wider text-tw-text-muted uppercase">
                 <RegistryListMinusIcon className="text-tw-error" />
                 Blacklist
@@ -547,12 +631,15 @@ export const { registry } = defineRegistry(catalog, {
                   </div>
                 ))}
               </div>
-            </div>
+            </>
           )}
 
-          {/* Whitelist */}
+          {hasBlacklist && hasWhitelist && (
+            <div className="border-t border-tw-border/35" aria-hidden />
+          )}
+
           {hasWhitelist && (
-            <div className="flex flex-col gap-2 rounded-xl bg-tw-card p-3">
+            <>
               <div className="flex items-center gap-1.5 text-[12px] tracking-wider text-tw-text-muted uppercase">
                 <RegistryListCheckIcon className="text-tw-success" />
                 Whitelist
@@ -579,7 +666,7 @@ export const { registry } = defineRegistry(catalog, {
                   </div>
                 ))}
               </div>
-            </div>
+            </>
           )}
         </div>
       )
@@ -588,7 +675,7 @@ export const { registry } = defineRegistry(catalog, {
     // ─── Score Breakdown ──────────────────────────────────────────
     ScoreBreakdown: ({ props }) => {
       return (
-        <div className="flex flex-col gap-3 rounded-xl bg-tw-card p-3">
+        <div className="flex flex-col gap-3 rounded-lg border border-tw-border/35 bg-tw-inner/30 p-2.5">
           <div className="flex items-baseline justify-between">
             <div className="flex items-center gap-1.5 text-[12px] tracking-wider text-tw-text-muted">
               @{props.username}
@@ -856,7 +943,7 @@ export const { registry } = defineRegistry(catalog, {
                   variant="ghost"
                   type="button"
                   onClick={() => setExpanded(expanded === i ? null : i)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[#ffffff08]"
+                  className="flex w-full items-center justify-start gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[#ffffff08]"
                 >
                   <span
                     className={`size-1.5 shrink-0 rounded-full ${stateColor[pr.state] ?? "bg-tw-text-muted"}`}
@@ -1379,7 +1466,7 @@ export const { registry } = defineRegistry(catalog, {
                   variant="ghost"
                   type="button"
                   onClick={() => setExpanded(expanded === i ? null : i)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[#ffffff08]"
+                  className="flex w-full items-center justify-start gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[#ffffff08]"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
@@ -1610,52 +1697,84 @@ export const { registry } = defineRegistry(catalog, {
 })
 
 // Fetches the score_breakdown spec via /api/tools/run (bypasses the LLM
-// — no token cost) and renders it inline beneath the card.
+// — no token cost) and renders it inline beneath the card. Keeps the last
+// fetched spec when hidden so toggling does not refetch.
 
-type BreakdownState =
-  | { phase: "idle" }
-  | { phase: "loading" }
-  | { phase: "ready"; spec: RenderSpec }
-  | { phase: "error"; message: string }
+type ScoreBreakdownUI = {
+  spec: RenderSpec | null
+  expanded: boolean
+  loading: boolean
+  error: string | null
+}
 
-function ScoreBreakdownButton({ username }: { username: string }) {
-  const [state, setState] = useState<BreakdownState>({ phase: "idle" })
+function ScoreBreakdownButton({
+  username,
+  repoId,
+}: {
+  username: string
+  /** When set (e.g. from lookup_user), scopes /api/tools/run to this repo. */
+  repoId?: string
+}) {
+  const [ui, setUi] = useState<ScoreBreakdownUI>({
+    spec: null,
+    expanded: false,
+    loading: false,
+    error: null,
+  })
 
   async function load() {
-    setState({ phase: "loading" })
+    setUi((s) => ({ ...s, loading: true, error: null }))
     try {
       const res = await fetch("/api/tools/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "score_breakdown", args: { username } }),
+        body: JSON.stringify({
+          name: "score_breakdown",
+          args: { username },
+          ...(repoId ? { repoId } : {}),
+        }),
       })
       const body = (await res.json()) as
         | { ok: true; spec: RenderSpec }
         | { ok: false; error: string }
       if (!res.ok || !body.ok) {
         const message = !body.ok ? body.error : `HTTP ${res.status}`
-        setState({ phase: "error", message })
+        setUi((s) => ({ ...s, loading: false, error: message }))
         return
       }
-      setState({ phase: "ready", spec: body.spec })
-    } catch (e) {
-      setState({
-        phase: "error",
-        message: e instanceof Error ? e.message : String(e),
+      setUi({
+        spec: body.spec,
+        expanded: true,
+        loading: false,
+        error: null,
       })
+    } catch (e) {
+      setUi((s) => ({
+        ...s,
+        loading: false,
+        error: e instanceof Error ? e.message : String(e),
+      }))
     }
   }
 
-  if (state.phase === "ready") {
+  function showCached() {
+    setUi((s) => ({ ...s, expanded: true }))
+  }
+
+  function hide() {
+    setUi((s) => ({ ...s, expanded: false }))
+  }
+
+  if (ui.expanded && ui.spec) {
     return (
-      <div className="flex flex-col gap-2 border-t border-tw-border pt-1">
+      <div className="mt-2 flex flex-col gap-2 border-t border-tw-border/25 pt-2">
         <JSONUIProvider registry={registry}>
-          <Renderer spec={state.spec} registry={registry} />
+          <Renderer spec={ui.spec} registry={registry} />
         </JSONUIProvider>
         <Button
           variant="ghost"
           type="button"
-          onClick={() => setState({ phase: "idle" })}
+          onClick={hide}
           className="self-start text-[10px] text-tw-text-muted transition-colors hover:text-tw-text-secondary"
         >
           Hide breakdown
@@ -1670,14 +1789,17 @@ function ScoreBreakdownButton({ username }: { username: string }) {
         variant="ghost"
         size="sm"
         type="button"
-        onClick={load}
-        disabled={state.phase === "loading"}
-        className="rounded-md bg-[#FAFAFA08] text-[10px] px-1 text-tw-text-secondary transition-colors disabled:opacity-50"
+        onClick={() => {
+          if (ui.spec) showCached()
+          else void load()
+        }}
+        disabled={ui.loading}
+        className="rounded-md bg-[#FAFAFA08] px-1 text-[10px] text-tw-text-secondary transition-colors disabled:opacity-50"
       >
-        {state.phase === "loading" ? "Loading…" : "Score breakdown"}
+        {ui.loading ? "Loading…" : "Score breakdown"}
       </Button>
-      {state.phase === "error" && (
-        <span className="text-[11px] text-tw-error">{state.message}</span>
+      {ui.error && (
+        <span className="text-[11px] text-tw-error">{ui.error}</span>
       )}
     </div>
   )

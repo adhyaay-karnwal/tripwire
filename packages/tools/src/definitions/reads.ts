@@ -502,6 +502,7 @@ const lookupUser = defineTool({
       score,
       badges: signals.badges,
       status: signals.status,
+      repoId,
       counts: {
         blockedCount: signals.scoreInput.blockedCount,
         allowedCount: signals.scoreInput.allowedCount,
@@ -522,9 +523,10 @@ const lookupUser = defineTool({
     }
   },
   chatRender: (output) => {
-    const { ghUser, counts, profile, score, badges, status } = output
+    const { ghUser, counts, profile, score, badges, status, repoId } = output
     return makeSpec("UserCard", {
       username: ghUser.login,
+      repoId,
       name: ghUser.name ?? null,
       avatar: ghUser.avatar_url ?? null,
       bio: ghUser.bio ?? null,

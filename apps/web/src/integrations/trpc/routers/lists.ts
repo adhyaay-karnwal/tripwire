@@ -6,9 +6,12 @@ import { trpcError } from "../error"
 import { db } from "@tripwire/db/client"
 import { whitelistEntries, blacklistEntries } from "@tripwire/db"
 import { logEvent } from "@tripwire/core"
+import { fetchPublicUser } from "@tripwire/github/public"
 import { getInstallationToken, getRepoContributors } from "@tripwire/github"
 
 import type { TRPCRouterRecord } from "@trpc/server"
+
+import { isValidGithubLogin } from "#/lib/github-login-validation"
 
 // Validate GitHub user exists and get their info
 async function validateGitHubUser(username: string): Promise<{
@@ -215,6 +218,32 @@ export const whitelistRouter = {
       ])
 
       return { whitelisted, blacklisted }
+    }),
+
+  resolveGithubMention: authedProcedure
+    .input(
+      z.object({
+        repoId: z.string().uuid(),
+        login: z.string().min(1).max(39),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      await assertRepoOwner(ctx.user.id, input.repoId)
+      const trimmed = input.login.trim()
+      if (!isValidGithubLogin(trimmed)) {
+        return null
+      }
+
+      const user = await fetchPublicUser(trimmed)
+      if (!user) {
+        return null
+      }
+
+      return {
+        login: user.login,
+        avatarUrl: user.avatar_url,
+        githubUserId: user.id,
+      }
     }),
 } satisfies TRPCRouterRecord
 

@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -9,20 +10,25 @@ import {
 } from "react"
 import { Button } from "#/components/ui/button"
 import { useQuery } from "@tanstack/react-query"
-import { CloseIcon } from "#/components/icons/close-icon"
 import { MicIcon, PlusIcon } from "#/components/icons/nav-icons"
 import { useTRPC } from "#/integrations/trpc/react"
 import { cn } from "@tripwire/ui/utils"
 import { useWorkspace } from "#/lib/workspace-context"
+import { parseCommand, type SlashCommand } from "#/lib/chat-commands"
 import {
   buildListedUserSuggestions,
   getMentionTrigger,
+  MAX_LISTED_USER_SUGGESTIONS,
   replaceMentionTrigger,
   type ListedUserSuggestion,
 } from "#/lib/chat/mentions"
-import { parseCommand, type SlashCommand } from "#/lib/chat-commands"
+import { isValidGithubLogin } from "#/lib/github-login-validation"
+import { useMentionChipAttachmentBelow } from "#/lib/hooks/use-mention-chip-attachment-below"
+import { UserMentionChip } from "#/components/chat/chips"
+import { CommandArgHint } from "#/components/chat/command-arg-hint"
 import { CommandPalette } from "#/components/chat/command-palette"
 import { useSlashCommandInput } from "#/components/chat/use-slash-command-input"
+import { UnicodeSpinner } from "#/components/ui/unicode-spinner"
 
 interface ChatComposerProps {
   className?: string
@@ -41,9 +47,18 @@ interface ChatComposerProps {
 }
 
 function listClasses(list: ListedUserSuggestion["list"]) {
-  return list === "blacklist"
-    ? "border-[#F56D5D26] bg-[#F56D5D14] text-[#F2A39A]"
-    : "border-[#67E19F26] bg-[#67E19F14] text-[#A7E9C3]"
+  switch (list) {
+    case "blacklist":
+      return "border-[#F56D5D26] bg-[#F56D5D14] text-[#F2A39A]"
+    case "whitelist":
+      return "border-[#67E19F26] bg-[#67E19F14] text-[#A7E9C3]"
+    case "github":
+      return "border-white/15 bg-white/10 text-tw-text-secondary"
+  }
+}
+
+function listBadgeLabel(list: ListedUserSuggestion["list"]): string {
+  return list === "github" ? "GitHub" : list
 }
 
 function MentionAvatar({
@@ -63,6 +78,54 @@ function MentionAvatar({
       loading="lazy"
     />
   )
+}
+
+/** Compose outgoing message from inline text + chipped mentions (slash-aware). */
+function buildComposedLine(
+  text: string,
+  mentions: ListedUserSuggestion[],
+  slashCommandRunner: ChatComposerProps["slashCommandRunner"]
+): string {
+  const trimmed = text.trim()
+  if (slashCommandRunner && text.trimStart().startsWith("/")) {
+    const handlesInText = new Set(
+      (trimmed.match(/@[A-Za-z0-9_-]+/g) ?? []).map((t) => t.toLowerCase())
+    )
+    const handles = mentions
+      .filter((m) => !handlesInText.has(`@${m.githubUsername}`.toLowerCase()))
+      .map((m) => `@${m.githubUsername}`)
+      .join(" ")
+    return [trimmed, handles].filter(Boolean).join(" ").trim()
+  }
+
+  const everyChipAlreadyInText =
+    mentions.length > 0 &&
+    mentions.every((m) => {
+      const esc = m.githubUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      return new RegExp(`@${esc}(?:\\s|$)`, "i").test(trimmed)
+    })
+
+  if (everyChipAlreadyInText) {
+    return trimmed
+  }
+
+  /** Message first, then chipped @handles — matches composer layout (text left, chips right). */
+  return [trimmed, ...mentions.map((m) => `@${m.githubUsername}`)]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+}
+
+/** Slash args: chip picked users instead of inserting `@name` into the input (avoids duplicate + split UX). */
+function stripMentionTriggerOnly(
+  value: string,
+  trigger: NonNullable<ReturnType<typeof getMentionTrigger>>
+): { value: string; cursorPosition: number } {
+  const before = value.slice(0, trigger.start)
+  const after = value.slice(trigger.end)
+  const nextValue = `${before}${after}`.replace(/\s{2,}/g, " ")
+  const cursorPosition = Math.min(trigger.start, nextValue.length)
+  return { value: nextValue, cursorPosition }
 }
 
 export function ChatComposer({
@@ -98,7 +161,30 @@ export function ChatComposer({
     ? `${trigger.start}:${trigger.end}:${trigger.query}`
     : null
 
-  const suggestions = useMemo(() => {
+  const activeMentionQuery = trigger?.query ?? ""
+  const [debouncedMentionQuery, setDebouncedMentionQuery] = useState("")
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setDebouncedMentionQuery(activeMentionQuery)
+    }, 300)
+    return () => window.clearTimeout(id)
+  }, [activeMentionQuery])
+
+  const resolveGithubMentionQuery = useQuery(
+    trpc.whitelist.resolveGithubMention.queryOptions(
+      { repoId: repo?.id ?? "", login: debouncedMentionQuery },
+      {
+        enabled:
+          Boolean(repo?.id) &&
+          !disabled &&
+          debouncedMentionQuery.length > 0 &&
+          isValidGithubLogin(debouncedMentionQuery),
+        staleTime: 60_000,
+      }
+    )
+  )
+
+  const listBasedSuggestions = useMemo(() => {
     if (!trigger || !mentionsQuery.data) return []
 
     const users: ListedUserSuggestion[] = [
@@ -115,23 +201,56 @@ export function ChatComposer({
     return buildListedUserSuggestions(users, trigger.query)
   }, [mentionsQuery.data, trigger])
 
-  const showSuggestions =
-    !disabled &&
-    !!trigger &&
-    triggerKey !== dismissedTriggerKey &&
-    suggestions.length > 0
-  const composedMessage = [
-    ...mentions.map((m) => `@${m.githubUsername}`),
-    text.trim(),
-  ]
-    .filter(Boolean)
-    .join(" ")
-  const activeSuggestion = showSuggestions
-    ? suggestions[highlightedIndex]
-    : undefined
-  const activeSuggestionId = activeSuggestion
-    ? `${suggestionListId}-${activeSuggestion.list}-${activeSuggestion.githubUsername.toLowerCase()}`
-    : undefined
+  const authoritativeResolvedGithubUser = useMemo(() => {
+    const data = resolveGithubMentionQuery.data
+    if (!data || !trigger) return null
+    if (debouncedMentionQuery !== trigger.query) return null
+    if (data.login.toLowerCase() !== trigger.query.toLowerCase()) return null
+    return data
+  }, [debouncedMentionQuery, resolveGithubMentionQuery.data, trigger])
+
+  const githubResolvedSuggestion = useMemo((): ListedUserSuggestion | null => {
+    if (!authoritativeResolvedGithubUser) return null
+    const loginKey = authoritativeResolvedGithubUser.login.toLowerCase()
+    if (
+      listBasedSuggestions.some(
+        (u) => u.githubUsername.toLowerCase() === loginKey
+      )
+    ) {
+      return null
+    }
+
+    return {
+      githubUsername: authoritativeResolvedGithubUser.login,
+      avatarUrl: authoritativeResolvedGithubUser.avatarUrl,
+      list: "github",
+    }
+  }, [authoritativeResolvedGithubUser, listBasedSuggestions])
+
+  const mentionSelectableRows = useMemo(() => {
+    const merged =
+      githubResolvedSuggestion !== null
+        ? [githubResolvedSuggestion, ...listBasedSuggestions]
+        : [...listBasedSuggestions]
+
+    return merged.slice(0, MAX_LISTED_USER_SUGGESTIONS)
+  }, [githubResolvedSuggestion, listBasedSuggestions])
+
+  /** Outgoing chat line: merges chipped mentions without duplicating handles already in `text`. */
+  const composedMessage = useMemo(
+    () => buildComposedLine(text, mentions, slashCommandRunner),
+    [mentions, slashCommandRunner, text]
+  )
+
+  const {
+    mentionsAttachBelow,
+    composerSurfaceRef,
+    inlineComposeRef,
+    chipAttachmentStripRef,
+  } = useMentionChipAttachmentBelow({
+    mentionCount: mentions.length,
+    textForMeasure: text,
+  })
 
   const resetComposer = useCallback(() => {
     setText("")
@@ -147,9 +266,18 @@ export function ChatComposer({
     if (slashCommandRunner) {
       const parsed = parseCommand(message)
       if (parsed) {
-        const r = await slashCommandRunner.run(message)
-        if (r.status === "done") {
-          resetComposer()
+        const snapshotText = text
+        const snapshotMentions = mentions
+        resetComposer()
+        try {
+          const r = await slashCommandRunner.run(message)
+          if (r.status === "error") {
+            setText(snapshotText)
+            setMentions(snapshotMentions)
+          }
+        } catch {
+          setText(snapshotText)
+          setMentions(snapshotMentions)
         }
         return
       }
@@ -157,7 +285,15 @@ export function ChatComposer({
 
     onSend(message)
     resetComposer()
-  }, [composedMessage, disabled, onSend, resetComposer, slashCommandRunner])
+  }, [
+    composedMessage,
+    disabled,
+    mentions,
+    onSend,
+    resetComposer,
+    slashCommandRunner,
+    text,
+  ])
 
   const selectSlashRef = useRef<(cmd: SlashCommand) => Promise<void>>(
     async () => {}
@@ -176,10 +312,10 @@ export function ChatComposer({
   })
 
   selectSlashRef.current = async (cmd: SlashCommand) => {
-    const value = text.trim()
+    const line = composedMessage.trim()
     const exactCommand =
-      value === cmd.command || value.startsWith(`${cmd.command} `)
-    const args = exactCommand ? value.slice(cmd.command.length).trim() : ""
+      line === cmd.command || line.startsWith(`${cmd.command} `)
+    const args = exactCommand ? line.slice(cmd.command.length).trim() : ""
 
     if (cmd.requiresArg && !args) {
       setText(`${cmd.command} `)
@@ -188,15 +324,61 @@ export function ChatComposer({
       return
     }
 
-    const raw = exactCommand ? value : cmd.command
+    const raw = exactCommand ? line : cmd.command
     if (!slashCommandRunner || !parseCommand(raw)) return
 
+    const snapshotText = text
+    const snapshotMentions = mentions
     resetComposer()
-    await slashCommandRunner.run(raw)
+    try {
+      const r = await slashCommandRunner.run(raw)
+      if (r.status === "error") {
+        setText(snapshotText)
+        setMentions(snapshotMentions)
+      }
+    } catch {
+      setText(snapshotText)
+      setMentions(snapshotMentions)
+    }
   }
 
   const showSlashPalette = Boolean(slashCommandRunner && slashInput.showPalette)
-  const showSuggestionsEffective = showSuggestions && !showSlashPalette
+
+  const showGithubResolveLoading =
+    Boolean(repo?.id) &&
+    !disabled &&
+    trigger !== null &&
+    debouncedMentionQuery === trigger.query &&
+    trigger.query.length > 0 &&
+    isValidGithubLogin(trigger.query) &&
+    resolveGithubMentionQuery.isFetching &&
+    authoritativeResolvedGithubUser === null
+
+  const showMentionSuggestions =
+    !disabled &&
+    !!trigger &&
+    triggerKey !== dismissedTriggerKey &&
+    (mentionSelectableRows.length > 0 || showGithubResolveLoading)
+
+  const showSuggestionsEffective =
+    showMentionSuggestions && !showSlashPalette
+
+  const activeSuggestion = showSuggestionsEffective
+    ? mentionSelectableRows[highlightedIndex]
+    : undefined
+
+  const activeSuggestionId = activeSuggestion
+    ? `${suggestionListId}-${activeSuggestion.list}-${activeSuggestion.githubUsername.toLowerCase()}`
+    : undefined
+
+  const parsedSlashLine = slashCommandRunner
+    ? parseCommand(text.trim())
+    : null
+  const showSlashArgHint =
+    Boolean(slashCommandRunner) &&
+    !slashInput.showPalette &&
+    !showSuggestionsEffective &&
+    parsedSlashLine !== null
 
   function updateCursor(element: HTMLInputElement) {
     setCursorPosition(element.selectionStart ?? element.value.length)
@@ -205,10 +387,20 @@ export function ChatComposer({
   function selectMention(user: ListedUserSuggestion) {
     if (!trigger) return
 
-    const next = replaceMentionTrigger(text, trigger, user.githubUsername)
+    const slashLine =
+      Boolean(slashCommandRunner) && text.trimStart().startsWith("/")
+    const next = slashLine
+      ? stripMentionTriggerOnly(text, trigger)
+      : replaceMentionTrigger(text, trigger, user.githubUsername)
 
     setDismissedTriggerKey(null)
-    setMentions((current) => [...current, user])
+    setMentions((current) => {
+      const key = user.githubUsername.toLowerCase()
+      if (current.some((m) => m.githubUsername.toLowerCase() === key)) {
+        return current
+      }
+      return [...current, user]
+    })
     setText(next.value)
     setHighlightedIndex(0)
     window.requestAnimationFrame(() => {
@@ -228,6 +420,17 @@ export function ChatComposer({
     )
   }
 
+  const mentionChipElements = mentions.map((user) => (
+    <UserMentionChip
+      key={`${user.list}-${user.githubUsername}`}
+      username={user.githubUsername}
+      avatarUrl={user.avatarUrl}
+      onRemove={() => removeMention(user.githubUsername)}
+    />
+  ))
+
+  const showInlineChipsRow = mentions.length > 0 && !mentionsAttachBelow
+
   function sendMessage() {
     void submitComposer()
   }
@@ -243,23 +446,31 @@ export function ChatComposer({
     }
 
     if (showSuggestionsEffective && event.key === "ArrowDown") {
+      if (mentionSelectableRows.length === 0) return
       event.preventDefault()
-      setHighlightedIndex((current) => (current + 1) % suggestions.length)
+      setHighlightedIndex(
+        (current) => (current + 1) % mentionSelectableRows.length
+      )
       return
     }
 
     if (showSuggestionsEffective && event.key === "ArrowUp") {
+      if (mentionSelectableRows.length === 0) return
       event.preventDefault()
       setHighlightedIndex(
-        (current) => (current - 1 + suggestions.length) % suggestions.length
+        (current) =>
+          (current - 1 + mentionSelectableRows.length) %
+          mentionSelectableRows.length
       )
       return
     }
 
     if (showSuggestionsEffective && event.key === "Enter") {
-      event.preventDefault()
-      const highlighted = suggestions[highlightedIndex]
-      if (highlighted) selectMention(highlighted)
+      const highlighted = mentionSelectableRows[highlightedIndex]
+      if (highlighted) {
+        event.preventDefault()
+        selectMention(highlighted)
+      }
       return
     }
 
@@ -297,13 +508,24 @@ export function ChatComposer({
           onHover={slashInput.setPaletteIndex}
         />
       ) : null}
-      {showSuggestionsEffective ? (
+      {showSlashArgHint && parsedSlashLine ? (
+        <CommandArgHint parsed={parsedSlashLine} />
+      ) : null}
+      {showSuggestionsEffective && trigger ? (
         <div
           id={suggestionListId}
           role="listbox"
           className="absolute right-1.5 bottom-full left-1.5 z-20 mb-1.5 overflow-hidden rounded-2xl bg-tw-card p-1.5 shadow-[0_8px_24px_#00000040,0_1px_2px_#0000001a]"
         >
-          {suggestions.map((user, index) => {
+          {showGithubResolveLoading ? (
+            <div className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-tw-text-secondary">
+              <UnicodeSpinner variant="orbit" />
+              <span className="min-w-0 flex-1 truncate text-[13px]">
+                Looking up @{trigger.query}
+              </span>
+            </div>
+          ) : null}
+          {mentionSelectableRows.map((user, index) => {
             const optionId = `${suggestionListId}-${user.list}-${user.githubUsername.toLowerCase()}`
 
             return (
@@ -330,9 +552,13 @@ export function ChatComposer({
                   @{user.githubUsername}
                 </span>
                 <span
-                  className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize ${listClasses(user.list)}`}
+                  className={cn(
+                    "rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+                    user.list !== "github" ? "capitalize" : "",
+                    listClasses(user.list)
+                  )}
                 >
-                  {user.list}
+                  {listBadgeLabel(user.list)}
                 </span>
               </Button>
             )
@@ -341,49 +567,62 @@ export function ChatComposer({
       ) : null}
 
       <div className="flex min-h-9 w-full flex-wrap items-center gap-1.5">
-        {mentions.map((user) => (
-          <span
-            key={`${user.list}-${user.githubUsername}`}
-            className={`inline-flex h-8 items-center gap-1.5 rounded-[10px] border px-1.5 pr-1 text-[12px] ${listClasses(user.list)}`}
+        <div
+          ref={composerSurfaceRef}
+          className={cn(
+            "flex min-h-9 min-w-0 flex-1 rounded-[10px] bg-tw-inner px-1.5 py-1",
+            mentions.length > 0 &&
+              mentionsAttachBelow &&
+              "min-h-0 flex-col gap-1.5 pb-2"
+          )}
+        >
+          <div
+            ref={inlineComposeRef}
+            className={cn(
+              "min-h-9 min-w-0 w-full",
+              showInlineChipsRow && "flex flex-nowrap items-center gap-1.5"
+            )}
           >
-            <MentionAvatar user={user} size="size-4" />
-            <span className="max-w-[120px] truncate">
-              @{user.githubUsername}
-            </span>
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={() => removeMention(user.githubUsername)}
-              className="flex size-4 items-center justify-center rounded-md text-current opacity-70 transition-opacity hover:opacity-100"
-              aria-label={`Remove @${user.githubUsername}`}
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder={mentions.length > 0 ? "" : placeholder}
+              value={text}
+              onChange={(event) => {
+                slashInput.handleInputChange(event)
+                updateCursor(event.target)
+                setDismissedTriggerKey(null)
+                setHighlightedIndex(0)
+              }}
+              onClick={(event) => updateCursor(event.currentTarget)}
+              onKeyUp={(event) => updateCursor(event.currentTarget)}
+              onKeyDown={handleKeyDown}
+              disabled={disabled}
+              role="combobox"
+              aria-autocomplete="list"
+              aria-controls={suggestionListId}
+              aria-expanded={showSuggestionsEffective}
+              aria-activedescendant={activeSuggestionId}
+              className={cn(
+                "min-h-8 rounded-md bg-transparent px-1.5 text-[14px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary disabled:opacity-50",
+                showInlineChipsRow
+                  ? "h-8 min-w-[8rem] shrink flex-1"
+                  : "h-8 w-full min-w-0 shrink-0"
+              )}
+            />
+            {showInlineChipsRow ? mentionChipElements : null}
+          </div>
+          {mentionsAttachBelow && mentions.length > 0 ? (
+            <div
+              ref={chipAttachmentStripRef}
+              role="group"
+              aria-label="Mentions"
+              className="-mx-0.5 flex max-w-full min-w-0 flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 [scrollbar-width:thin]"
             >
-              <CloseIcon className="size-2.5" />
-            </Button>
-          </span>
-        ))}
-
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder={mentions.length > 0 ? "" : placeholder}
-          value={text}
-          onChange={(event) => {
-            slashInput.handleInputChange(event)
-            updateCursor(event.target)
-            setDismissedTriggerKey(null)
-            setHighlightedIndex(0)
-          }}
-          onClick={(event) => updateCursor(event.currentTarget)}
-          onKeyUp={(event) => updateCursor(event.currentTarget)}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          role="combobox"
-          aria-autocomplete="list"
-          aria-controls={suggestionListId}
-          aria-expanded={showSuggestionsEffective}
-          aria-activedescendant={activeSuggestionId}
-          className="h-9 min-w-[120px] flex-1 rounded-[10px] bg-tw-inner px-2.5 text-[14px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary disabled:opacity-50"
-        />
+              {mentionChipElements}
+            </div>
+          ) : null}
+        </div>
         <Button
           variant="ghost"
           type="button"

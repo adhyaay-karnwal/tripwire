@@ -14,6 +14,39 @@ import type {
   ParsedCommand,
 } from "#/lib/chat-commands"
 
+type RunSlashResult = {
+  messages: unknown[]
+  replace?: boolean
+  newChat?: boolean
+}
+
+/** Coalesce concurrent identical slash reads to a single network request. */
+const slashReadInflight = new Map<string, Promise<RunSlashResult>>()
+
+function slashReadCacheKey(
+  chatId: string,
+  repoId: string | undefined,
+  raw: string
+) {
+  return `${chatId}\0${repoId ?? ""}\0${raw.trim()}`
+}
+
+async function runSlashReadDeduped(
+  key: string,
+  run: () => Promise<RunSlashResult>
+): Promise<RunSlashResult> {
+  const existing = slashReadInflight.get(key)
+  if (existing) return existing
+
+  const p = run().finally(() => {
+    if (slashReadInflight.get(key) === p) {
+      slashReadInflight.delete(key)
+    }
+  })
+  slashReadInflight.set(key, p)
+  return p
+}
+
 type RunResult =
   | { kind: "done" }
   | { kind: "needs-confirmation"; confirmation: MutationConfirmation }
@@ -225,11 +258,14 @@ export function useSlashCommandRunner(adapter?: CommandRunnerAdapter) {
         if (loading) appendOptimisticMessage(loading)
         await nextFrame()
 
-        const result = await runSlashCommandOnServer.mutateAsync({
-          chatId,
-          repoId,
-          raw,
-        })
+        const dedupeKey = slashReadCacheKey(chatId, repoId, raw)
+        const result = await runSlashReadDeduped(dedupeKey, () =>
+          runSlashCommandOnServer.mutateAsync({
+            chatId,
+            repoId,
+            raw,
+          })
+        )
 
         if (result.newChat) {
           newChat()

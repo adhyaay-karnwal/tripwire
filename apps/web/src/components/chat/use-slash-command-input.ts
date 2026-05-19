@@ -5,7 +5,11 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from "react"
-import { filterCommands, type SlashCommand } from "#/lib/chat-commands"
+import {
+  filterCommands,
+  isSlashCommandDiscovery,
+  type SlashCommand,
+} from "#/lib/chat-commands"
 
 interface UseSlashCommandInputOptions {
   inputValue: string
@@ -28,7 +32,7 @@ export function useSlashCommandInput({
     [inputValue]
   )
   const showPalette =
-    inputValue.startsWith("/") && paletteCommands.length > 0
+    isSlashCommandDiscovery(inputValue) && paletteCommands.length > 0
   const selectedPaletteCommand = showPalette
     ? paletteCommands[Math.min(paletteIndex, paletteCommands.length - 1)]
     : undefined

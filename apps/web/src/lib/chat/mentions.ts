@@ -1,4 +1,4 @@
-export type ListedUserStatus = "blacklist" | "whitelist"
+export type ListedUserStatus = "blacklist" | "whitelist" | "github"
 
 export interface ListedUserSuggestion {
   githubUsername: string
@@ -12,7 +12,10 @@ export interface MentionTrigger {
   end: number
 }
 
-const MAX_SUGGESTIONS = 6
+/** Max list-based @ suggestions (GitHub-resolved row can prepend before slicing). */
+export const MAX_LISTED_USER_SUGGESTIONS = 6
+
+const MAX_SUGGESTIONS = MAX_LISTED_USER_SUGGESTIONS
 
 export function getMentionTrigger(
   value: string,

@@ -1,20 +1,50 @@
 import type { ReactNode } from "react"
 import { ChipIssueGlyphIcon10 } from "#/components/icons/chip-issue-glyph-icon"
 
-export function UserMentionChip({ username }: { username: string }) {
+export function UserMentionChip({
+  username,
+  avatarUrl,
+  onRemove,
+}: {
+  username: string
+  avatarUrl?: string | null
+  /** When set, show a remove control (e.g. chat composer chips). */
+  onRemove?: () => void
+}) {
+  const src =
+    typeof avatarUrl === "string" && avatarUrl.trim().length > 0
+      ? avatarUrl.trim()
+      : `https://github.com/${username}.png?size=28`
+
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-md border border-[#2B303B] bg-[#212328] px-1 py-[1.5px] shadow-[0_0_8px_rgba(59,130,246,0.15)]"
+      className="inline-flex max-w-full items-center gap-0.5 rounded-md border border-[#2B303B] bg-[#212328] py-0.5 pr-0.5 pl-1"
       style={{ verticalAlign: "-0.2em" }}
     >
       <img
-        src={`https://github.com/${username}.png?size=28`}
+        src={src}
         alt=""
-        className="h-3.5 w-3.5 rounded-full bg-[#3a3a3e] ring-1 ring-white/10"
+        className="size-3.5 shrink-0 rounded-full bg-[#3a3a3e] ring-1 ring-white/10"
       />
-      <span className="px-0.5 text-[12px] leading-tight font-medium text-[#FAFAFA]">
+      <span className="min-w-0 max-w-[140px] truncate px-0.5 text-[12px] leading-tight font-medium text-[#FAFAFA]">
         @{username}
       </span>
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onRemove()
+          }}
+          className="flex size-5 shrink-0 items-center justify-center rounded text-[#FAFAFA]/50 transition-colors hover:bg-white/10 hover:text-[#FAFAFA]"
+          aria-label={`Remove @${username}`}
+        >
+          <span className="text-[14px] leading-none" aria-hidden>
+            ×
+          </span>
+        </button>
+      ) : null}
     </span>
   )
 }

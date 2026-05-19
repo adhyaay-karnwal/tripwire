@@ -235,12 +235,7 @@ export function filterCommands(query: string): SlashCommand[] {
   if (!query.startsWith("/")) return []
   const q = query.slice(1).toLowerCase()
 
-  const spaceIdx = query.indexOf(" ")
-  if (spaceIdx !== -1) {
-    const cmdName = query.slice(0, spaceIdx)
-    const exact = CHAT_COMMANDS.find((c) => c.command === cmdName)
-    return exact ? [exact] : []
-  }
+  if (query.indexOf(" ") !== -1) return []
 
   if (q === "") return [...CHAT_COMMANDS]
   return CHAT_COMMANDS.filter(
@@ -248,4 +243,14 @@ export function filterCommands(query: string): SlashCommand[] {
       c.command.slice(1).toLowerCase().startsWith(q) ||
       c.label.toLowerCase().includes(q)
   )
+}
+
+/**
+ * True while the user is still typing the command token (before any space).
+ * After a space we treat input as argument entry and hide the palette.
+ */
+export function isSlashCommandDiscovery(input: string): boolean {
+  if (!input.startsWith("/")) return false
+  if (input.includes(" ")) return false
+  return filterCommands(input).length > 0
 }

@@ -2,6 +2,42 @@ import { defineCatalog } from "@json-render/core"
 import { schema } from "@json-render/react/schema"
 import { z } from "zod"
 
+/** Shared schema for profile cards — used by `UserCard` and carousel slides. */
+export const userCardSlidePropsSchema = z.object({
+  username: z.string(),
+  name: z.string().nullable(),
+  avatar: z.string().nullable(),
+  bio: z.string().nullable(),
+  company: z.string().nullable(),
+  location: z.string().nullable(),
+  publicRepos: z.number(),
+  publicNonForkRepos: z.number(),
+  publicForkRepos: z.number(),
+  prsToThisRepo: z.number(),
+  followers: z.number(),
+  following: z.number(),
+  accountAgeDays: z.number(),
+  mergedPrs: z.number(),
+  closedPrs: z.number(),
+  closedUnmergedPrs: z.number(),
+  hasProfileReadme: z.boolean(),
+  hasTwoFactor: z.boolean(),
+  blockedCount: z.number(),
+  allowedCount: z.number(),
+  nearMissCount: z.number(),
+  orgs: z.array(z.object({ login: z.string(), avatarUrl: z.string() })),
+  sponsorsCount: z.number(),
+  sponsoringCount: z.number(),
+  achievements: z.array(z.object({ type: z.string(), tier: z.number() })),
+  badges: z.array(z.string()),
+  contributionsLastYear: z.number(),
+  contributorScore: z.number(),
+  status: z.enum(["normal", "blacklisted", "whitelisted"]),
+  repoId: z.string().uuid().optional(),
+})
+
+export type UserCardSlideProps = z.infer<typeof userCardSlidePropsSchema>
+
 /**
  * UI Catalog for AI tool results
  * Defines the components the AI can use to render structured responses
@@ -9,44 +45,27 @@ import { z } from "zod"
 export const catalog = defineCatalog(schema, {
   actions: {},
   components: {
-    // ─── User Profile Card ────────────────────────────────────────
     UserCard: {
-      props: z.object({
-        username: z.string(),
-        name: z.string().nullable(),
-        avatar: z.string().nullable(),
-        bio: z.string().nullable(),
-        company: z.string().nullable(),
-        location: z.string().nullable(),
-        publicRepos: z.number(),
-        publicNonForkRepos: z.number(),
-        publicForkRepos: z.number(),
-        prsToThisRepo: z.number(),
-        followers: z.number(),
-        following: z.number(),
-        accountAgeDays: z.number(),
-        mergedPrs: z.number(),
-        closedPrs: z.number(),
-        closedUnmergedPrs: z.number(),
-        hasProfileReadme: z.boolean(),
-        hasTwoFactor: z.boolean(),
-        // event breakdown
-        blockedCount: z.number(),
-        allowedCount: z.number(),
-        nearMissCount: z.number(),
-        // enriched (graphql)
-        orgs: z.array(z.object({ login: z.string(), avatarUrl: z.string() })),
-        sponsorsCount: z.number(),
-        sponsoringCount: z.number(),
-        achievements: z.array(z.object({ type: z.string(), tier: z.number() })),
-        badges: z.array(z.string()),
-        contributionsLastYear: z.number(),
-        // score
-        contributorScore: z.number(),
-        status: z.enum(["normal", "blacklisted", "whitelisted"]),
-      }),
+      props: userCardSlidePropsSchema,
       description:
         "Displays a GitHub user profile with enriched metrics and contributor score",
+    },
+
+    LookupUsersCarousel: {
+      props: z.object({
+        title: z.string().optional(),
+        slides: z.array(userCardSlidePropsSchema).min(1),
+        errors: z
+          .array(
+            z.object({
+              username: z.string(),
+              message: z.string(),
+            }),
+          )
+          .optional(),
+      }),
+      description:
+        "Carousel of contributor lookup cards plus optional per-user error rows.",
     },
 
     // ─── Events List ──────────────────────────────────────────────
