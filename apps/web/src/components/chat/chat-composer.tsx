@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useCallback,
   type KeyboardEvent,
   type ReactNode,
 } from "react"
@@ -19,6 +20,9 @@ import {
   replaceMentionTrigger,
   type ListedUserSuggestion,
 } from "#/lib/chat/mentions"
+import { parseCommand, type SlashCommand } from "#/lib/chat-commands"
+import { CommandPalette } from "#/components/chat/command-palette"
+import { useSlashCommandInput } from "#/components/chat/use-slash-command-input"
 
 interface ChatComposerProps {
   className?: string
@@ -27,6 +31,13 @@ interface ChatComposerProps {
   isLoading?: boolean
   placeholder?: string
   onSend: (message: string) => void
+  /**
+   * When set and the line parses as a slash command, `run` is called instead
+   * of `onSend`. Return `done` to clear the composer; `error` keeps the text.
+   */
+  slashCommandRunner?: {
+    run: (raw: string) => Promise<{ status: "done" | "error"; message?: string }>
+  }
 }
 
 function listClasses(list: ListedUserSuggestion["list"]) {
@@ -61,6 +72,7 @@ export function ChatComposer({
   isLoading = false,
   placeholder = "Ask anything...",
   onSend,
+  slashCommandRunner,
 }: ChatComposerProps) {
   const { repo } = useWorkspace()
   const trpc = useTRPC()
@@ -121,6 +133,71 @@ export function ChatComposer({
     ? `${suggestionListId}-${activeSuggestion.list}-${activeSuggestion.githubUsername.toLowerCase()}`
     : undefined
 
+  const resetComposer = useCallback(() => {
+    setText("")
+    setMentions([])
+    setDismissedTriggerKey(null)
+    setHighlightedIndex(0)
+  }, [])
+
+  const submitComposer = useCallback(async () => {
+    const message = composedMessage.trim()
+    if (!message || disabled) return
+
+    if (slashCommandRunner) {
+      const parsed = parseCommand(message)
+      if (parsed) {
+        const r = await slashCommandRunner.run(message)
+        if (r.status === "done") {
+          resetComposer()
+        }
+        return
+      }
+    }
+
+    onSend(message)
+    resetComposer()
+  }, [composedMessage, disabled, onSend, resetComposer, slashCommandRunner])
+
+  const selectSlashRef = useRef<(cmd: SlashCommand) => Promise<void>>(
+    async () => {}
+  )
+
+  const slashInput = useSlashCommandInput({
+    inputValue: text,
+    setInputValue: setText,
+    onSubmit: () => {
+      void submitComposer()
+    },
+    onSelectCommand: (cmd) => {
+      void selectSlashRef.current(cmd)
+    },
+    inputRef,
+  })
+
+  selectSlashRef.current = async (cmd: SlashCommand) => {
+    const value = text.trim()
+    const exactCommand =
+      value === cmd.command || value.startsWith(`${cmd.command} `)
+    const args = exactCommand ? value.slice(cmd.command.length).trim() : ""
+
+    if (cmd.requiresArg && !args) {
+      setText(`${cmd.command} `)
+      slashInput.setPaletteIndex(0)
+      inputRef.current?.focus()
+      return
+    }
+
+    const raw = exactCommand ? value : cmd.command
+    if (!slashCommandRunner || !parseCommand(raw)) return
+
+    resetComposer()
+    await slashCommandRunner.run(raw)
+  }
+
+  const showSlashPalette = Boolean(slashCommandRunner && slashInput.showPalette)
+  const showSuggestionsEffective = showSuggestions && !showSlashPalette
+
   function updateCursor(element: HTMLInputElement) {
     setCursorPosition(element.selectionStart ?? element.value.length)
   }
@@ -152,14 +229,7 @@ export function ChatComposer({
   }
 
   function sendMessage() {
-    const message = composedMessage.trim()
-    if (!message || disabled) return
-
-    onSend(message)
-    setText("")
-    setMentions([])
-    setDismissedTriggerKey(null)
-    setHighlightedIndex(0)
+    void submitComposer()
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -167,13 +237,18 @@ export function ChatComposer({
       return
     }
 
-    if (showSuggestions && event.key === "ArrowDown") {
+    if (showSlashPalette) {
+      slashInput.handleKeyDown(event)
+      return
+    }
+
+    if (showSuggestionsEffective && event.key === "ArrowDown") {
       event.preventDefault()
       setHighlightedIndex((current) => (current + 1) % suggestions.length)
       return
     }
 
-    if (showSuggestions && event.key === "ArrowUp") {
+    if (showSuggestionsEffective && event.key === "ArrowUp") {
       event.preventDefault()
       setHighlightedIndex(
         (current) => (current - 1 + suggestions.length) % suggestions.length
@@ -181,14 +256,14 @@ export function ChatComposer({
       return
     }
 
-    if (showSuggestions && event.key === "Enter") {
+    if (showSuggestionsEffective && event.key === "Enter") {
       event.preventDefault()
       const highlighted = suggestions[highlightedIndex]
       if (highlighted) selectMention(highlighted)
       return
     }
 
-    if (showSuggestions && event.key === "Escape") {
+    if (showSuggestionsEffective && event.key === "Escape") {
       event.preventDefault()
       setDismissedTriggerKey(triggerKey)
       return
@@ -212,7 +287,17 @@ export function ChatComposer({
         className
       )}
     >
-      {showSuggestions ? (
+      {showSlashPalette ? (
+        <CommandPalette
+          commands={slashInput.paletteCommands}
+          selectedIndex={slashInput.paletteIndex}
+          onSelect={(cmd) => {
+            void selectSlashRef.current(cmd)
+          }}
+          onHover={slashInput.setPaletteIndex}
+        />
+      ) : null}
+      {showSuggestionsEffective ? (
         <div
           id={suggestionListId}
           role="listbox"
@@ -283,7 +368,7 @@ export function ChatComposer({
           placeholder={mentions.length > 0 ? "" : placeholder}
           value={text}
           onChange={(event) => {
-            setText(event.target.value)
+            slashInput.handleInputChange(event)
             updateCursor(event.target)
             setDismissedTriggerKey(null)
             setHighlightedIndex(0)
@@ -295,7 +380,7 @@ export function ChatComposer({
           role="combobox"
           aria-autocomplete="list"
           aria-controls={suggestionListId}
-          aria-expanded={showSuggestions}
+          aria-expanded={showSuggestionsEffective}
           aria-activedescendant={activeSuggestionId}
           className="h-9 min-w-[120px] flex-1 rounded-[10px] bg-tw-inner px-2.5 text-[14px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary disabled:opacity-50"
         />

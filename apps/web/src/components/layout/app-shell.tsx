@@ -1,4 +1,7 @@
 import { useState, useMemo } from "react"
+import { parseCommand } from "#/lib/chat-commands"
+import { useSlashCommandRunner } from "#/lib/use-chat-command-runner"
+import { CommandConfirmation } from "#/components/chat/command-confirmation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
@@ -65,8 +68,22 @@ function AppShellInner() {
     messages: chatMessages,
   } = useAIChat()
   const { repos, isLoading: workspaceLoading, orgs } = useWorkspace()
+  const [mutationLoading, setMutationLoading] = useState(false)
+
+  const { runCommand, runMutation, cancelMutation, pendingConfirmation } =
+    useSlashCommandRunner()
   const needsInstall =
     !workspaceLoading && orgs.length > 0 && repos.length === 0
+
+  const handleConfirmMutation = async () => {
+    if (!pendingConfirmation) return
+    setMutationLoading(true)
+    try {
+      await runMutation(pendingConfirmation)
+    } finally {
+      setMutationLoading(false)
+    }
+  }
 
   // Compute cumulative usage from message metadata, with estimation fallback
   const chatUsage = useMemo(() => {
@@ -248,13 +265,36 @@ function AppShellInner() {
               </div>
 
               <div className="relative z-10 shrink-0 px-2 pb-2">
+                {pendingConfirmation ? (
+                  <CommandConfirmation
+                    confirmation={pendingConfirmation}
+                    onConfirm={handleConfirmMutation}
+                    onCancel={cancelMutation}
+                    isLoading={mutationLoading}
+                  />
+                ) : null}
                 <ChatComposer
-                  disabled={isLoading || isQuotaExhausted}
+                  disabled={isLoading || isQuotaExhausted || mutationLoading}
                   isLoading={isLoading}
                   placeholder={
-                    isQuotaExhausted ? "Out of credits" : "Ask anything..."
+                    isQuotaExhausted
+                      ? "Out of credits"
+                      : "Ask anything, or type / for commands..."
                   }
                   onSend={sendMessage}
+                  slashCommandRunner={{
+                    run: async (raw) => {
+                      const parsed = parseCommand(raw.trim())
+                      if (!parsed) {
+                        return { status: "error", message: "Unknown command" }
+                      }
+                      const result = await runCommand(parsed)
+                      if (result.kind === "error") {
+                        return { status: "error", message: result.message }
+                      }
+                      return { status: "done" }
+                    },
+                  }}
                 />
               </div>
             </div>

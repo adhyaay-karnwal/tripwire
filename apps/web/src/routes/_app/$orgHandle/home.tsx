@@ -12,6 +12,7 @@ import { useWorkspace, useWorkspacePath } from "#/lib/workspace-context"
 import { useTRPC } from "#/integrations/trpc/react"
 import { TripwireLogo } from "#/components/icons/tripwire-logo"
 import { OnboardingCheckCircleIcon14 } from "#/components/icons/app-chrome-icons"
+import { parseCommand } from "#/lib/chat-commands"
 
 export const Route = createFileRoute("/_app/$orgHandle/home")({
   component: HomePage,
@@ -327,9 +328,38 @@ function HomeFloatingBar() {
         className="w-full shadow-[0_8px_24px_#00000040,0_1px_2px_#0000001a]"
         disabled={createChat.isPending}
         isLoading={createChat.isPending}
-        placeholder="Ask anything..."
+        placeholder="Ask anything, or type / for commands..."
         onSend={(message) => {
           void handleSubmit(message)
+        }}
+        slashCommandRunner={{
+          run: async (raw) => {
+            const trimmed = raw.trim()
+            if (!parseCommand(trimmed)) {
+              return { status: "error", message: "Unknown command" }
+            }
+            const chatId = crypto.randomUUID()
+            try {
+              await createChat.mutateAsync({ id: chatId, repoId: repo?.id })
+              window.sessionStorage.setItem(
+                `tw.chat.init.${chatId}`,
+                trimmed
+              )
+              navigate({
+                to: "/chat/$chatId",
+                params: { chatId },
+              })
+              return { status: "done" }
+            } catch (err) {
+              toastManager.add({
+                type: "error",
+                title: "Failed to start chat",
+                description:
+                  err instanceof Error ? err.message : "Please try again.",
+              })
+              return { status: "error" }
+            }
+          },
         }}
         contextActionAdornment={
           <span className="ml-0.5 flex items-center pr-2">
