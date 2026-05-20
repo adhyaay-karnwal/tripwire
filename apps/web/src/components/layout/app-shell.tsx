@@ -296,7 +296,7 @@ function AppShellInner() {
                 </p>
               </div>
 
-              <div className="relative z-10 min-h-0 flex-1 overflow-auto px-2 pb-2">
+              <div className="relative z-10 min-h-0 flex-1 overflow-auto scroll-mask-y-from-[calc(100%-2rem)] px-2 pb-2">
                 <ChatThread />
               </div>
 
@@ -415,7 +415,6 @@ function SidebarRecentChats() {
 
   return (
     <div className="relative shrink-0 px-3 py-1">
-      <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-[#17171a] to-transparent" />
       <div className="mb-0.5">
         <span className="text-[11px] font-medium tracking-wider text-tw-text-muted uppercase">
           Recent
