@@ -24,7 +24,7 @@ export function FeedbackDialog() {
           </div>
           <DialogClose
             aria-label="Close"
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-tw-text-muted transition-colors hover:text-tw-text-primary hover:bg-tw-inner"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-tw-text-muted transition-colors hover:bg-tw-inner hover:text-tw-text-primary"
           >
             <XIcon className="size-4" />
           </DialogClose>

@@ -296,7 +296,7 @@ function AppShellInner() {
                 </p>
               </div>
 
-              <div className="relative z-10 min-h-0 flex-1 overflow-auto scroll-mask-y-from-[calc(100%-2rem)] px-2 pb-2">
+              <div className="relative z-10 min-h-0 flex-1 overflow-auto px-2 pb-2 scroll-mask-y-from-[calc(100%-2rem)]">
                 <ChatThread />
               </div>
 
@@ -482,8 +482,12 @@ function SidebarRecentChats() {
                 }}
                 className="flex min-w-0 flex-1 items-center gap-1.5"
               >
-                <ChatBubbleOutlineIcon12 className={`shrink-0 ${isActive ? "text-tw-text-primary" : "text-tw-text-muted"}`} />
-                <span className={`truncate text-[12px] ${isActive ? "text-tw-text-primary" : "text-tw-text-muted"}`}>
+                <ChatBubbleOutlineIcon12
+                  className={`shrink-0 ${isActive ? "text-tw-text-primary" : "text-tw-text-muted"}`}
+                />
+                <span
+                  className={`truncate text-[12px] ${isActive ? "text-tw-text-primary" : "text-tw-text-muted"}`}
+                >
                   {chat.title ?? "New chat"}
                 </span>
               </button>

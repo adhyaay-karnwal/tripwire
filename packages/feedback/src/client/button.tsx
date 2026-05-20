@@ -1,42 +1,42 @@
-import { useFeedback } from './context';
-import type { ReactNode } from 'react';
+import { useFeedback } from "./context"
+import type { ReactNode } from "react"
 
-type Position = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+type Position = "bottom-right" | "bottom-left" | "top-right" | "top-left"
 
 const POSITION_CLASSES: Record<Position, string> = {
-  'bottom-right': 'fixed bottom-5 right-5',
-  'bottom-left': 'fixed bottom-5 left-5',
-  'top-right': 'fixed top-5 right-5',
-  'top-left': 'fixed top-5 left-5',
-};
+  "bottom-right": "fixed bottom-5 right-5",
+  "bottom-left": "fixed bottom-5 left-5",
+  "top-right": "fixed top-5 right-5",
+  "top-left": "fixed top-5 left-5",
+}
 
-const DEFAULT_LABEL = 'Feedback';
+const DEFAULT_LABEL = "Feedback"
 
 export function FeedbackButton({
-  position = 'bottom-right',
+  position = "bottom-right",
   label,
   className,
   children,
 }: {
-  position?: Position;
-  label?: string;
-  className?: string;
-  children?: ReactNode;
+  position?: Position
+  label?: string
+  className?: string
+  children?: ReactNode
 }) {
-  const { open, isOpen } = useFeedback();
+  const { open, isOpen } = useFeedback()
 
   if (isOpen) {
-    return null;
+    return null
   }
 
-  const resolvedLabel = label ?? DEFAULT_LABEL;
+  const resolvedLabel = label ?? DEFAULT_LABEL
 
   return (
     <button
       type="button"
       onClick={open}
       aria-label={resolvedLabel}
-      className={`${POSITION_CLASSES[position]} z-[9999] flex items-center gap-2 rounded-full bg-tw-card border border-tw-border px-4 py-2 text-sm font-medium text-tw-text-secondary shadow-lg transition-all hover:bg-tw-surface hover:text-tw-text-primary hover:border-tw-text-tertiary active:scale-95${className ? ` ${className}` : ''}`}
+      className={`${POSITION_CLASSES[position]} z-[9999] flex items-center gap-2 rounded-full border border-tw-border bg-tw-card px-4 py-2 text-sm font-medium text-tw-text-secondary shadow-lg transition-all hover:border-tw-text-tertiary hover:bg-tw-surface hover:text-tw-text-primary active:scale-95${className ? ` ${className}` : ""}`}
     >
       {children ?? (
         <>
@@ -58,5 +58,5 @@ export function FeedbackButton({
         </>
       )}
     </button>
-  );
+  )
 }

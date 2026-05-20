@@ -1,19 +1,19 @@
-import { useRef } from 'react';
-import { useFeedback } from './context';
-import { FeedbackForm } from './form';
+import { useRef } from "react"
+import { useFeedback } from "./context"
+import { FeedbackForm } from "./form"
 
 export function FeedbackModal() {
-  const { isOpen, close, config } = useFeedback();
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const modalZIndex = config.ui?.zIndex ?? 10_000;
+  const { isOpen, close, config } = useFeedback()
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const modalZIndex = config.ui?.zIndex ?? 10_000
 
-  const prevIsOpen = useRef(isOpen);
+  const prevIsOpen = useRef(isOpen)
   if (prevIsOpen.current !== isOpen) {
-    prevIsOpen.current = isOpen;
+    prevIsOpen.current = isOpen
     if (isOpen) {
-      queueMicrotask(() => dialogRef.current?.showModal());
+      queueMicrotask(() => dialogRef.current?.showModal())
     } else {
-      queueMicrotask(() => dialogRef.current?.close());
+      queueMicrotask(() => dialogRef.current?.close())
     }
   }
 
@@ -27,5 +27,5 @@ export function FeedbackModal() {
     >
       <FeedbackForm />
     </dialog>
-  );
+  )
 }
