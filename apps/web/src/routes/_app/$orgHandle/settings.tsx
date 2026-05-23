@@ -107,8 +107,8 @@ function OrgProfileSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["org.full", orgId] })
-      // Better Auth's useListOrganizations is keyed internally — invalidate
-      // broadly so the workspace switcher picks up the new name.
+      // Better Auth's useListOrganizations is keyed internally, so invalidate
+      // broadly to ensure the workspace switcher picks up the new name.
       queryClient.invalidateQueries()
       toastManager.add({ type: "success", title: "Organization renamed" })
     },

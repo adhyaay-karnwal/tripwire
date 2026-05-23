@@ -1,12 +1,8 @@
+import { scoreTier } from "#/lib/score"
+
 interface ScoreBadgeProps {
   score: number
   size?: "sm" | "md"
-}
-
-function scoreTier(score: number): "high" | "mid" | "low" {
-  if (score >= 75) return "high"
-  if (score >= 41) return "mid"
-  return "low"
 }
 
 const tierStyles = {

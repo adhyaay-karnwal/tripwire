@@ -53,7 +53,7 @@ interface LogEventOptions {
  */
 export async function logEvent(options: LogEventOptions) {
   // Drop bot/ghost-targeted events at the ingest boundary, but only when the
-  // event actually targets a user — admin/config events with no target must
+  // event actually targets a user. Admin/config events with no target must
   // still log.
   if (
     options.targetGithubUsername &&
@@ -154,7 +154,7 @@ async function updateReputation(options: LogEventOptions) {
   const isNearMiss = options.action === "rule_near_miss"
 
   // `score` is owned by the rich-score pipeline (computeContributorScore via
-  // the visibility sync). Webhooks only bump counts — touching score here
+  // the visibility sync). Webhooks only bump counts. Touching score here
   // would clobber the rich value with a counter formula.
   try {
     await db

@@ -41,9 +41,9 @@ export function SyncBar({ repoId, repoFullName }: SyncBarProps) {
 
   const mutation = useMutation(
     trpc.visibility.requestSync.mutationOptions({
-      onSuccess: () => {
+      onSuccess: (_data, vars) => {
         setConfirmOpen(false)
-        invalidateRepoData(queryClient, repoId)
+        invalidateRepoData(queryClient, vars.repoId)
         toastManager.add({ type: "success", title: "Sync started" })
       },
       onError: (err) =>
