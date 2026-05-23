@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
 import { useAuth, AuthProvider } from "@tripwire/auth/components"
 import { TripwireLogo } from "#/components/icons/tripwire-logo"
@@ -18,10 +19,11 @@ function OnboardingShell() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  if (!user) {
-    navigate({ to: "/login" })
-    return null
-  }
+  useEffect(() => {
+    if (!user) navigate({ to: "/login" })
+  }, [user, navigate])
+
+  if (!user) return null
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-tw-bg px-4 py-10">

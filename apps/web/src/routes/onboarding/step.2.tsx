@@ -11,6 +11,12 @@ export const Route = createFileRoute("/onboarding/step/2")({
   component: Step2Page,
 })
 
+interface RepoOptionProps {
+  fullName: string
+  selected: boolean
+  onClick: () => void
+}
+
 function Step2Page() {
   const navigate = useNavigate()
   const trpc = useTRPC()
@@ -71,15 +77,7 @@ function Step2Page() {
   )
 }
 
-function RepoOption({
-  fullName,
-  selected,
-  onClick,
-}: {
-  fullName: string
-  selected: boolean
-  onClick: () => void
-}) {
+function RepoOption({ fullName, selected, onClick }: RepoOptionProps) {
   return (
     <Button
       variant="ghost"

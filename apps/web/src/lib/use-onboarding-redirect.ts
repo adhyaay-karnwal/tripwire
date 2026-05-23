@@ -17,6 +17,9 @@ export function useOnboardingRedirect() {
     if (pathname.startsWith("/settings")) return
     if (pathname.startsWith("/login")) return
     if (pathname.startsWith("/api")) return
+    // Also exempt org-scoped settings (`/{orgHandle}/settings`) so users
+    // visiting org settings aren't bounced into the onboarding wizard.
+    if (/^\/[^/]+\/settings(\/|$)/.test(pathname)) return
     if (stateQuery.data === null) {
       navigate({ to: "/onboarding/step/1" })
       return

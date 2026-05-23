@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { authClient } from "@tripwire/auth/client"
 import { Button } from "@tripwire/ui/button"
@@ -26,29 +26,44 @@ interface CreateOrgDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+interface CreateOrgFormProps {
+  onClose: () => void
+}
+
+interface SlugStatusProps {
+  error: string | null
+  checking: boolean
+  available: boolean
+}
+
 const FORMAT_HINT =
   "Lowercase letters, numbers, and hyphens. 1–39 chars, starts with a letter or number."
 
 export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogPopup
+        bottomStickOnMobile={false}
+        showCloseButton={false}
+        className="max-w-sm"
+      >
+        {open ? (
+          <CreateOrgForm onClose={() => onOpenChange(false)} />
+        ) : null}
+      </DialogPopup>
+    </Dialog>
+  )
+}
+
+function CreateOrgForm({ onClose }: CreateOrgFormProps) {
   const trpc = useTRPC()
   const { setOrg } = useWorkspace()
   const [name, setName] = useState("")
-  const [slug, setSlug] = useState("")
-  const [slugTouched, setSlugTouched] = useState(false)
+  const [slugOverride, setSlugOverride] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (!open) {
-      setName("")
-      setSlug("")
-      setSlugTouched(false)
-      setSubmitting(false)
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!slugTouched) setSlug(slugify(name))
-  }, [name, slugTouched])
+  // Slug is derived from name unless the user has typed into the slug field.
+  const slug = slugOverride ?? slugify(name)
 
   const localError = ((): string | null => {
     if (slug.length === 0) return null
@@ -59,7 +74,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
 
   const remoteCheck = useQuery({
     ...trpc.orgs.checkSlugAvailable.queryOptions({ slug }),
-    enabled: open && slug.length > 0 && localError === null,
+    enabled: slug.length > 0 && localError === null,
     staleTime: 5_000,
   })
 
@@ -90,7 +105,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
       if (res.error) throw res.error
       return res.data
     },
-    onSuccess: async (data) => {
+    onSuccess: (data) => {
       if (data) {
         setOrg({
           id: data.id,
@@ -99,7 +114,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
           logo: data.logo ?? null,
         })
       }
-      onOpenChange(false)
+      onClose()
     },
     onError: (err) =>
       toastFromError(err, { fallbackTitle: "Couldn't create organization" }),
@@ -113,90 +128,73 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup
-        bottomStickOnMobile={false}
-        showCloseButton={false}
-        className="max-w-sm"
-      >
-        <DialogHeader>
-          <DialogTitle>Create organization</DialogTitle>
-          <DialogDescription>
-            Group repos under a separate workspace. You'll be the owner.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogPanel>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[12px] text-tw-text-muted">Name</label>
+    <>
+      <DialogHeader>
+        <DialogTitle>Create organization</DialogTitle>
+        <DialogDescription>
+          Group repos under a separate workspace. You'll be the owner.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogPanel>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] text-tw-text-muted">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Acme Inc."
+              autoComplete="off"
+              className="h-9 w-full rounded-lg border border-[#27272A] bg-tw-inner px-2.5 text-[13px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary focus:border-tw-accent"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] text-tw-text-muted">URL</label>
+            <div className="flex items-stretch overflow-hidden rounded-lg border border-[#27272A] bg-tw-inner focus-within:border-tw-accent">
+              <span className="flex items-center px-2.5 font-mono text-[12px] text-tw-text-muted">
+                tripwire.dev/
+              </span>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Acme Inc."
+                value={slug}
+                onChange={(e) => setSlugOverride(e.target.value.toLowerCase())}
+                placeholder="acme"
                 autoComplete="off"
-                className="h-9 w-full rounded-lg border border-[#27272A] bg-tw-inner px-2.5 text-[13px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary focus:border-tw-accent"
+                spellCheck={false}
+                className="h-9 flex-1 bg-transparent pr-2.5 font-mono text-[13px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary"
               />
             </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[12px] text-tw-text-muted">URL</label>
-              <div className="flex items-stretch overflow-hidden rounded-lg border border-[#27272A] bg-tw-inner focus-within:border-tw-accent">
-                <span className="flex items-center px-2.5 font-mono text-[12px] text-tw-text-muted">
-                  tripwire.dev/
-                </span>
-                <input
-                  type="text"
-                  value={slug}
-                  onChange={(e) => {
-                    setSlugTouched(true)
-                    setSlug(e.target.value.toLowerCase())
-                  }}
-                  placeholder="acme"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="h-9 flex-1 bg-transparent pr-2.5 font-mono text-[13px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary"
-                />
-              </div>
-              <SlugStatus
-                error={error}
-                checking={remoteCheck.isFetching}
-                available={
-                  remoteCheck.data?.available === true && slug.length > 0
-                }
-              />
-            </div>
+            <SlugStatus
+              error={error}
+              checking={remoteCheck.isFetching}
+              available={
+                remoteCheck.data?.available === true && slug.length > 0
+              }
+            />
           </div>
-        </DialogPanel>
-        <DialogFooter variant="default" side="end">
-          <DialogClose className="flex h-8 items-center rounded-lg border border-[#27272A] px-3 text-[13px] font-medium text-tw-text-secondary transition-colors hover:bg-tw-hover">
-            Cancel
-          </DialogClose>
-          <Button
-            variant="default"
-            type="button"
-            disabled={!canSubmit}
-            loading={submitting}
-            onClick={handleSubmit}
-            className="flex h-8 items-center rounded-lg px-3 text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Create
-          </Button>
-        </DialogFooter>
-      </DialogPopup>
-    </Dialog>
+        </div>
+      </DialogPanel>
+      <DialogFooter variant="default" side="end">
+        <DialogClose className="flex h-8 items-center rounded-lg border border-[#27272A] px-3 text-[13px] font-medium text-tw-text-secondary transition-colors hover:bg-tw-hover">
+          Cancel
+        </DialogClose>
+        <Button
+          variant="default"
+          type="button"
+          disabled={!canSubmit}
+          loading={submitting}
+          onClick={handleSubmit}
+          className="flex h-8 items-center rounded-lg px-3 text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Create
+        </Button>
+      </DialogFooter>
+    </>
   )
 }
 
-function SlugStatus({
-  error,
-  checking,
-  available,
-}: {
-  error: string | null
-  checking: boolean
-  available: boolean
-}) {
+function SlugStatus({ error, checking, available }: SlugStatusProps) {
   if (error) return <span className="text-[11px] text-tw-error">{error}</span>
   if (checking)
     return (

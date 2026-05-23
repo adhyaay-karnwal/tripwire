@@ -12,11 +12,47 @@ export const Route = createFileRoute("/_app/$orgHandle/settings")({
   component: OrgSettingsPage,
 })
 
-type OrgMember = {
+interface OrgMemberUser {
+  name: string | null
+  email: string | null
+  image?: string | null
+}
+
+interface OrgMember {
   id: string
   role: string
   userId: string
-  user: { name: string | null; email: string | null; image?: string | null }
+  user: OrgMemberUser
+}
+
+interface OrgProfileSectionProps {
+  orgId: string
+  orgName: string
+  orgSlug: string
+  canEdit: boolean
+}
+
+interface MembersSectionProps {
+  members: OrgMember[]
+  currentMembership: OrgMember | null
+  showEmails: boolean
+  loading: boolean
+}
+
+interface SectionShellProps {
+  title: string
+  description: string
+  children: React.ReactNode
+}
+
+interface FieldProps {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}
+
+interface RoleBadgeProps {
+  role: string
 }
 
 function OrgSettingsPage() {
@@ -63,6 +99,7 @@ function OrgSettingsPage() {
       </div>
 
       <OrgProfileSection
+        key={org.id}
         orgId={org.id}
         orgName={org.name}
         orgSlug={org.slug}
@@ -86,12 +123,7 @@ function OrgProfileSection({
   orgName,
   orgSlug,
   canEdit,
-}: {
-  orgId: string
-  orgName: string
-  orgSlug: string
-  canEdit: boolean
-}) {
+}: OrgProfileSectionProps) {
   const [name, setName] = useState(orgName)
   const queryClient = useQueryClient()
   const dirty = name.trim().length > 0 && name.trim() !== orgName
@@ -107,9 +139,13 @@ function OrgProfileSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["org.full", orgId] })
-      // Better Auth's useListOrganizations is keyed internally, so invalidate
-      // broadly to ensure the workspace switcher picks up the new name.
-      queryClient.invalidateQueries()
+      // The workspace switcher subscribes to Better Auth's
+      // useListOrganizations, which sets its own internal key. Target the
+      // documented Better Auth atom keys instead of nuking the whole cache.
+      queryClient.invalidateQueries({
+        queryKey: ["$sessionSignal", "list-organizations"],
+      })
+      queryClient.invalidateQueries({ queryKey: ["organizations"] })
       toastManager.add({ type: "success", title: "Organization renamed" })
     },
     onError: (err) =>
@@ -124,10 +160,10 @@ function OrgProfileSection({
       <div className="flex flex-col gap-4 rounded-xl bg-tw-card p-4">
         <Field label="URL" hint="Locked. URL changes are coming later.">
           <div className="flex items-stretch overflow-hidden rounded-lg border border-tw-border bg-tw-inner">
-            <span className="flex items-center bg-tw-inner px-2 font-mono text-[12px] text-tw-text-muted">
-              tripwire.sh/
+            <span className="flex items-center bg-tw-inner px-2.5 font-mono text-[12px] text-tw-text-muted">
+              tripwire.dev/
             </span>
-            <span className="flex h-9 flex-1 items-center px-2 font-mono text-[13px] text-tw-text-primary">
+            <span className="flex h-9 flex-1 items-center px-0 font-mono text-[13px] text-tw-text-primary">
               {orgSlug}
             </span>
           </div>
@@ -167,12 +203,7 @@ function MembersSection({
   members,
   showEmails,
   loading,
-}: {
-  members: OrgMember[]
-  currentMembership: OrgMember | null
-  showEmails: boolean
-  loading: boolean
-}) {
+}: MembersSectionProps) {
   return (
     <SectionShell
       title={`Members${members.length > 0 ? ` (${members.length})` : ""}`}
@@ -228,7 +259,7 @@ function InvitationsSection() {
   return (
     <SectionShell
       title="Invitations"
-      description="Invite new members by email — coming with the email package."
+      description="Invite new members by email, coming with the email package."
     >
       <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-tw-border bg-tw-card/40 px-4 py-3">
         <div className="flex flex-col">
@@ -253,15 +284,7 @@ function InvitationsSection() {
   )
 }
 
-function SectionShell({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description: string
-  children: React.ReactNode
-}) {
+function SectionShell({ title, description, children }: SectionShellProps) {
   return (
     <div className="flex flex-col gap-3">
       <div>
@@ -275,15 +298,7 @@ function SectionShell({
   )
 }
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}) {
+function Field({ label, hint, children }: FieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-col gap-0.5">
@@ -299,13 +314,13 @@ function Field({
   )
 }
 
-function RoleBadge({ role }: { role: string }) {
+function RoleBadge({ role }: RoleBadgeProps) {
   const tone =
     role === "owner"
-      ? "text-tw-text-primary bg-tw-accent border-tw-accent"
+      ? "border-tw-accent/20 bg-tw-accent/10 text-tw-accent"
       : role === "admin"
-        ? "text-tw-text-primary bg-tw-error border-tw-error"
-        : "text-tw-text-secondary bg-tw-inner border-tw-border"
+        ? "border-tw-success/20 bg-tw-success/10 text-tw-success"
+        : "border-tw-border bg-tw-inner text-tw-text-secondary"
   return (
     <span
       className={`inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-[11px] font-medium capitalize ${tone}`}

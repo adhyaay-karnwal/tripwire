@@ -48,21 +48,34 @@ function SettingsLayout() {
             </Link>
           )
         })}
-        {org ? (
-          <Link
-            to="/$orgHandle/settings"
-            params={{ orgHandle: org.slug }}
-            className={sidebarItemClass(false)}
-          >
-            Organization
-          </Link>
-        ) : null}
+        {org ? <OrgSettingsLink slug={org.slug} /> : null}
       </div>
 
       <div className="min-w-0 flex-1">
         <Outlet />
       </div>
     </div>
+  )
+}
+
+interface OrgSettingsLinkProps {
+  slug: string
+}
+
+function OrgSettingsLink({ slug }: OrgSettingsLinkProps) {
+  const currentPath = useRouterState({ select: (s) => s.location.pathname })
+  const isActive = currentPath.startsWith(`/${slug}/settings`)
+  return (
+    <Link
+      to="/$orgHandle/settings"
+      params={{ orgHandle: slug }}
+      className={sidebarItemClass(isActive)}
+    >
+      Organization
+      {isActive ? (
+        <span className="size-1 rounded-full bg-tw-text-tertiary" />
+      ) : null}
+    </Link>
   )
 }
 

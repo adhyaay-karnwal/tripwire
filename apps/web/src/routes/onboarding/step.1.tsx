@@ -8,6 +8,10 @@ export const Route = createFileRoute("/onboarding/step/1")({
   component: Step1Page,
 })
 
+interface BulletProps {
+  children: React.ReactNode
+}
+
 function Step1Page() {
   const navigate = useNavigate()
   const trpc = useTRPC()
@@ -52,7 +56,7 @@ function Step1Page() {
   )
 }
 
-function Bullet({ children }: { children: React.ReactNode }) {
+function Bullet({ children }: BulletProps) {
   return (
     <li className="flex items-start gap-2.5">
       <span className="mt-1.5 size-1 shrink-0 rounded-full bg-tw-text-tertiary" />

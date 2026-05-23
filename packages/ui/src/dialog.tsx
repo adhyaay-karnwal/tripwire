@@ -141,16 +141,24 @@ export function DialogFooter({
   side?: "start" | "end"
   variant?: "default" | "bare"
 }): React.ReactElement {
+  // Static class strings so Tailwind's scanner can pick them up at build time.
+  const justifyClass =
+    side === "start"
+      ? "justify-start sm:justify-start"
+      : "justify-end sm:justify-end"
+
   const defaultProps = {
     className: cn(
-      `flex flex-col-reverse gap-2 px-5 sm:flex-row justify-${side}`,
+      "flex flex-col-reverse gap-2 px-5 sm:flex-row",
+      justifyClass,
       variant === "default" &&
-        `rounded-b-xl border-t border-tw-border bg-tw-bg/50 py-4 sm:justify-${side}`,
+        "rounded-b-xl border-t border-tw-border bg-tw-bg/50 py-4",
       variant === "bare" &&
-        `pt-2 pb-5 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pt-2 sm:justify-${side}`,
+        "pt-2 pb-5 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pt-2",
       className
     ),
-    "data-slot": `dialog-footer-${side}`,
+    "data-slot": "dialog-footer",
+    "data-side": side,
   }
 
   return useRender({

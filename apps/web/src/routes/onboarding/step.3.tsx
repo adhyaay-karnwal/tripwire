@@ -11,6 +11,18 @@ export const Route = createFileRoute("/onboarding/step/3")({
   component: Step3Page,
 })
 
+interface FieldProps {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}
+
+interface PillsProps<T extends string> {
+  options: { value: T; label: string }[]
+  value: T | null
+  onChange: (v: T) => void
+}
+
 type UseCase =
   | "ai_prs"
   | "crypto_bots"
@@ -148,15 +160,7 @@ function Step3Page() {
   )
 }
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}) {
+function Field({ label, hint, children }: FieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-col gap-0.5">
@@ -176,11 +180,7 @@ function Pills<T extends string>({
   options,
   value,
   onChange,
-}: {
-  options: { value: T; label: string }[]
-  value: T | null
-  onChange: (v: T) => void
-}) {
+}: PillsProps<T>) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => (

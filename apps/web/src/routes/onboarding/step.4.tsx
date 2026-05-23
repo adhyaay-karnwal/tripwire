@@ -9,6 +9,23 @@ export const Route = createFileRoute("/onboarding/step/4")({
   component: Step4Page,
 })
 
+interface SyncStatusRowProps {
+  status: string | undefined
+  itemsProcessed: number
+  eventsInserted: number
+  contributors: number
+}
+
+interface RowProps {
+  tone: "running" | "success" | "error"
+  label: string
+  children: React.ReactNode
+}
+
+interface NextItemProps {
+  children: React.ReactNode
+}
+
 function Step4Page() {
   const navigate = useNavigate()
   const trpc = useTRPC()
@@ -117,12 +134,7 @@ function SyncStatusRow({
   itemsProcessed,
   eventsInserted,
   contributors,
-}: {
-  status: string | undefined
-  itemsProcessed: number
-  eventsInserted: number
-  contributors: number
-}) {
+}: SyncStatusRowProps) {
   if (status === "completed") {
     return (
       <Row tone="success" label="Backfill complete">
@@ -153,15 +165,7 @@ function SyncStatusRow({
   )
 }
 
-function Row({
-  tone,
-  label,
-  children,
-}: {
-  tone: "running" | "success" | "error"
-  label: string
-  children: React.ReactNode
-}) {
+function Row({ tone, label, children }: RowProps) {
   const accent =
     tone === "success"
       ? "text-tw-success"
@@ -187,7 +191,7 @@ function Row({
   )
 }
 
-function NextItem({ children }: { children: React.ReactNode }) {
+function NextItem({ children }: NextItemProps) {
   return (
     <li className="flex items-start gap-2.5">
       <span className="mt-1.5 size-1 shrink-0 rounded-full bg-tw-text-tertiary" />
