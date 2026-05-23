@@ -53,6 +53,7 @@ import { Route as AppSettingsAccountRouteImport } from './routes/_app/settings/a
 import { Route as AppEventsEventIdRouteImport } from './routes/_app/events/$eventId'
 import { Route as AppChatChatIdRouteImport } from './routes/_app/chat/$chatId'
 import { Route as AppOrgHandleVisibilityRouteImport } from './routes/_app/$orgHandle/visibility'
+import { Route as AppOrgHandleSettingsRouteImport } from './routes/_app/$orgHandle/settings'
 import { Route as AppOrgHandleIntegrationsRouteImport } from './routes/_app/$orgHandle/integrations'
 import { Route as AppOrgHandleInsightsRouteImport } from './routes/_app/$orgHandle/insights'
 import { Route as AppOrgHandleHomeRouteImport } from './routes/_app/$orgHandle/home'
@@ -297,6 +298,11 @@ const AppOrgHandleVisibilityRoute = AppOrgHandleVisibilityRouteImport.update({
   path: '/visibility',
   getParentRoute: () => AppOrgHandleRoute,
 } as any)
+const AppOrgHandleSettingsRoute = AppOrgHandleSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppOrgHandleRoute,
+} as any)
 const AppOrgHandleIntegrationsRoute =
   AppOrgHandleIntegrationsRouteImport.update({
     id: '/integrations',
@@ -453,6 +459,7 @@ export interface FileRoutesByFullPath {
   '/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
+  '/$orgHandle/settings': typeof AppOrgHandleSettingsRoute
   '/$orgHandle/visibility': typeof AppOrgHandleVisibilityRoute
   '/chat/$chatId': typeof AppChatChatIdRoute
   '/events/$eventId': typeof AppEventsEventIdRoute
@@ -519,6 +526,7 @@ export interface FileRoutesByTo {
   '/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
+  '/$orgHandle/settings': typeof AppOrgHandleSettingsRoute
   '/$orgHandle/visibility': typeof AppOrgHandleVisibilityRoute
   '/chat/$chatId': typeof AppChatChatIdRoute
   '/events/$eventId': typeof AppEventsEventIdRoute
@@ -589,6 +597,7 @@ export interface FileRoutesById {
   '/_app/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/_app/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/_app/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
+  '/_app/$orgHandle/settings': typeof AppOrgHandleSettingsRoute
   '/_app/$orgHandle/visibility': typeof AppOrgHandleVisibilityRoute
   '/_app/chat/$chatId': typeof AppChatChatIdRoute
   '/_app/events/$eventId': typeof AppEventsEventIdRoute
@@ -658,6 +667,7 @@ export interface FileRouteTypes {
     | '/$orgHandle/home'
     | '/$orgHandle/insights'
     | '/$orgHandle/integrations'
+    | '/$orgHandle/settings'
     | '/$orgHandle/visibility'
     | '/chat/$chatId'
     | '/events/$eventId'
@@ -724,6 +734,7 @@ export interface FileRouteTypes {
     | '/$orgHandle/home'
     | '/$orgHandle/insights'
     | '/$orgHandle/integrations'
+    | '/$orgHandle/settings'
     | '/$orgHandle/visibility'
     | '/chat/$chatId'
     | '/events/$eventId'
@@ -793,6 +804,7 @@ export interface FileRouteTypes {
     | '/_app/$orgHandle/home'
     | '/_app/$orgHandle/insights'
     | '/_app/$orgHandle/integrations'
+    | '/_app/$orgHandle/settings'
     | '/_app/$orgHandle/visibility'
     | '/_app/chat/$chatId'
     | '/_app/events/$eventId'
@@ -1169,6 +1181,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgHandleVisibilityRouteImport
       parentRoute: typeof AppOrgHandleRoute
     }
+    '/_app/$orgHandle/settings': {
+      id: '/_app/$orgHandle/settings'
+      path: '/settings'
+      fullPath: '/$orgHandle/settings'
+      preLoaderRoute: typeof AppOrgHandleSettingsRouteImport
+      parentRoute: typeof AppOrgHandleRoute
+    }
     '/_app/$orgHandle/integrations': {
       id: '/_app/$orgHandle/integrations'
       path: '/integrations'
@@ -1400,6 +1419,7 @@ interface AppOrgHandleRouteChildren {
   AppOrgHandleHomeRoute: typeof AppOrgHandleHomeRoute
   AppOrgHandleInsightsRoute: typeof AppOrgHandleInsightsRoute
   AppOrgHandleIntegrationsRoute: typeof AppOrgHandleIntegrationsRoute
+  AppOrgHandleSettingsRoute: typeof AppOrgHandleSettingsRoute
   AppOrgHandleVisibilityRoute: typeof AppOrgHandleVisibilityRoute
   AppOrgHandleAutomationsAutomationIdRoute: typeof AppOrgHandleAutomationsAutomationIdRoute
   AppOrgHandleAutomationsPreviewRoute: typeof AppOrgHandleAutomationsPreviewRoute
@@ -1413,6 +1433,7 @@ const AppOrgHandleRouteChildren: AppOrgHandleRouteChildren = {
   AppOrgHandleHomeRoute: AppOrgHandleHomeRoute,
   AppOrgHandleInsightsRoute: AppOrgHandleInsightsRoute,
   AppOrgHandleIntegrationsRoute: AppOrgHandleIntegrationsRoute,
+  AppOrgHandleSettingsRoute: AppOrgHandleSettingsRoute,
   AppOrgHandleVisibilityRoute: AppOrgHandleVisibilityRoute,
   AppOrgHandleAutomationsAutomationIdRoute:
     AppOrgHandleAutomationsAutomationIdRoute,
