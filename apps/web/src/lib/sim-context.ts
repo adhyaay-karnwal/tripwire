@@ -100,7 +100,7 @@ function fieldLabel(field: string): string {
     score: "Contributor score",
     accountAgeDays: "Account age (days)",
     publicRepos: "Public repos",
-    publicNonForkRepos: "Non-fork repos",
+    nonForkRepos: "Non-fork repos",
     followers: "Followers",
     following: "Following",
     publicGists: "Public gists",

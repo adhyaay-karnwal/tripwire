@@ -81,8 +81,8 @@ export const reputationRouter = {
         reputationRow,
         mergedPrs,
         closedPrs,
-        publicNonForkRepos,
-        publicForkRepos,
+        nonForkRepos,
+        forkRepos,
         prsToThisRepo,
         profileReadme,
         graphqlData,
@@ -181,8 +181,8 @@ export const reputationRouter = {
           ((ghUser as Record<string, unknown>).following as number) ?? 0,
         publicRepos:
           ((ghUser as Record<string, unknown>).public_repos as number) ?? 0,
-        publicNonForkRepoCount: publicNonForkRepos,
-        publicForkRepoCount: publicForkRepos,
+        publicNonForkRepoCount: nonForkRepos,
+        publicForkRepoCount: forkRepos,
         contextRepoPrCount: prsToThisRepo,
         publicGists:
           ((ghUser as Record<string, unknown>).public_gists as number) ?? 0,

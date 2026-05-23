@@ -311,8 +311,8 @@ export const workflowsRouter = {
           ghUser,
           mergedPrs,
           closedPrs,
-          publicNonForkRepos,
-          publicForkRepos,
+          nonForkRepos,
+          forkRepos,
           profileReadme,
           graphqlData,
           achievements,
@@ -366,8 +366,8 @@ export const workflowsRouter = {
             ((ghUser as Record<string, unknown>).following as number) ?? 0,
           publicRepos:
             ((ghUser as Record<string, unknown>).public_repos as number) ?? 0,
-          publicNonForkRepoCount: publicNonForkRepos,
-          publicForkRepoCount: publicForkRepos,
+          publicNonForkRepoCount: nonForkRepos,
+          publicForkRepoCount: forkRepos,
           contextRepoPrCount: 0,
           publicGists:
             ((ghUser as Record<string, unknown>).public_gists as number) ?? 0,
@@ -411,7 +411,8 @@ export const workflowsRouter = {
               ((ghUser as Record<string, unknown>).following as number) ?? 0,
             publicRepos:
               ((ghUser as Record<string, unknown>).public_repos as number) ?? 0,
-            publicNonForkRepos: publicNonForkRepos,
+            nonForkRepos,
+            forkRepos,
             publicGists:
               ((ghUser as Record<string, unknown>).public_gists as number) ?? 0,
             hasProfileReadme: profileReadme,
@@ -432,15 +433,17 @@ export const workflowsRouter = {
       const accountAgeDays = Math.floor(
         (Date.now() - new Date(user.created_at).getTime()) / 86_400_000
       )
-      const nonForkRepos = repos.filter((r) => !r.fork)
+      const nonForkRepoList = repos.filter((r) => !r.fork)
+      const nonForkRepos = nonForkRepoList.length
+      const forkRepos = repos.length - nonForkRepoList.length
 
       const score = computeContributorScore({
         accountAgeDays,
         followers: user.followers,
         following: user.following,
         publicRepos: user.public_repos,
-        publicNonForkRepoCount: nonForkRepos.length,
-        publicForkRepoCount: repos.length - nonForkRepos.length,
+        publicNonForkRepoCount: nonForkRepos,
+        publicForkRepoCount: forkRepos,
         contextRepoPrCount: 0,
         publicGists: user.public_gists,
         bio: user.bio,
@@ -474,7 +477,8 @@ export const workflowsRouter = {
           followers: user.followers,
           following: user.following,
           publicRepos: user.public_repos,
-          publicNonForkRepos: nonForkRepos.length,
+          nonForkRepos,
+          forkRepos,
           publicGists: user.public_gists,
           hasProfileReadme: false,
           mergedPrs: 0,
@@ -842,7 +846,7 @@ export const workflowsRouter = {
       const results = []
       for (const username of input.usernames) {
         try {
-          const [ghUser, mergedPrs, publicNonForkRepos, profileReadme] =
+          const [ghUser, mergedPrs, nonForkRepos, profileReadme] =
             await Promise.all([
               getUser(token, username).catch(() => null),
               getMergedPrCount(token, username).catch(() => 0),
@@ -870,7 +874,7 @@ export const workflowsRouter = {
               ((ghUser as Record<string, unknown>).following as number) ?? 0,
             publicRepos:
               ((ghUser as Record<string, unknown>).public_repos as number) ?? 0,
-            publicNonForkRepoCount: publicNonForkRepos,
+            publicNonForkRepoCount: nonForkRepos,
             publicForkRepoCount: 0,
             contextRepoPrCount: 0,
             publicGists:

@@ -215,8 +215,8 @@ async function gatherUserSignals(
     reputationRow,
     mergedPrs,
     closedPrs,
-    publicNonForkRepos,
-    publicForkRepos,
+    nonForkRepos,
+    forkRepos,
     prsToThisRepo,
     profileReadme,
     graphqlData,
@@ -459,8 +459,8 @@ async function gatherUserSignals(
       followers: ghUser.followers ?? 0,
       following: ghUser.following ?? 0,
       publicRepos: ghUser.public_repos ?? 0,
-      publicNonForkRepoCount: publicNonForkRepos,
-      publicForkRepoCount: publicForkRepos,
+      publicNonForkRepoCount: nonForkRepos,
+      publicForkRepoCount: forkRepos,
       contextRepoPrCount: prsToThisRepo,
       publicGists: ghUser.public_gists ?? 0,
       bio: ghUser.bio ?? null,
@@ -501,8 +501,8 @@ async function lookupUserExecute(
     blockedCount: number
     allowedCount: number
     nearMissCount: number
-    publicNonForkRepos: number
-    publicForkRepos: number
+    nonForkRepos: number
+    forkRepos: number
     prsToThisRepo: number
     mergedPrs: number
     closedPrs: number
@@ -527,8 +527,8 @@ async function lookupUserExecute(
       blockedCount: signals.scoreInput.blockedCount,
       allowedCount: signals.scoreInput.allowedCount,
       nearMissCount: signals.scoreInput.nearMissCount,
-      publicNonForkRepos: signals.scoreInput.publicNonForkRepoCount,
-      publicForkRepos: signals.scoreInput.publicForkRepoCount,
+      nonForkRepos: signals.scoreInput.publicNonForkRepoCount,
+      forkRepos: signals.scoreInput.publicForkRepoCount,
       prsToThisRepo: signals.scoreInput.contextRepoPrCount,
       mergedPrs: signals.scoreInput.mergedPrCount,
       closedPrs: signals.scoreInput.closedPrCount,
@@ -555,8 +555,8 @@ function lookupOutputToSlideRecord(
     company: output.ghUser.company ?? null,
     location: output.ghUser.location ?? null,
     publicRepos: output.ghUser.public_repos ?? 0,
-    publicNonForkRepos: output.counts.publicNonForkRepos,
-    publicForkRepos: output.counts.publicForkRepos,
+    nonForkRepos: output.counts.nonForkRepos,
+    forkRepos: output.counts.forkRepos,
     prsToThisRepo: output.counts.prsToThisRepo,
     followers: output.ghUser.followers ?? 0,
     following: output.ghUser.following ?? 0,

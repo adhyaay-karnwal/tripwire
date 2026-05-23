@@ -17,6 +17,7 @@ import {
   hasProfileReadme,
 } from "@tripwire/github"
 import { computeContributorScore } from "@tripwire/core"
+import { executeWorkflow } from "@tripwire/core/workflow-executor"
 
 export type RunReportUserData = {
   user: { login: string; avatarUrl: string; name: string | null }
@@ -79,7 +80,7 @@ export async function fetchWorkflowRunContext(input: {
     const [
       ghUser,
       mergedPrs,
-      publicNonForkRepos,
+      nonForkRepos,
       profileReadme,
       graphqlData,
       achievements,
@@ -124,7 +125,7 @@ export async function fetchWorkflowRunContext(input: {
           ((ghUser as Record<string, unknown>).following as number) ?? 0,
         publicRepos:
           ((ghUser as Record<string, unknown>).public_repos as number) ?? 0,
-        publicNonForkRepoCount: publicNonForkRepos,
+        publicNonForkRepoCount: nonForkRepos,
         publicForkRepoCount: 0,
         contextRepoPrCount: 0,
         publicGists:
@@ -164,7 +165,7 @@ export async function fetchWorkflowRunContext(input: {
             ((ghUser as Record<string, unknown>).followers as number) ?? 0,
           publicRepos:
             ((ghUser as Record<string, unknown>).public_repos as number) ?? 0,
-          publicNonForkRepos: publicNonForkRepos,
+          nonForkRepos,
           hasProfileReadme: profileReadme,
           mergedPrs,
           score: score.total,
@@ -253,151 +254,72 @@ export function workflowSupportsManualRun(wf: {
   return workflowDefinitionHasManualTrigger(def)
 }
 
-/** Graph walk matching workflowsRouter.runReport (server-side). */
+function actionLabel(data: Record<string, unknown>): string {
+  return (
+    (data.action as string) ??
+    (data.rule as string) ??
+    (data.gate as string) ??
+    (data.trigger as string) ??
+    "node"
+  )
+}
+
+/**
+ * Runs the workflow through @tripwire/core's executeWorkflow — same path the
+ * client test button uses, same evaluators the .test.ts files exercise. The
+ * test button and the server run report now share one source of truth.
+ */
 export function simulateWorkflowDefinition(
   wf: { id: string; name: string; definition: unknown },
-  userData: RunReportUserData
+  userData: RunReportUserData,
+  contentText?: string | null
 ): SingleWorkflowSimResult {
   const def = wf.definition as {
-    nodes: Array<Record<string, unknown>>
-    edges: Array<Record<string, unknown>>
+    nodes: Array<{
+      id: string
+      type: string
+      data?: Record<string, unknown>
+    }>
+    edges: Array<{
+      id: string
+      source: string
+      target: string
+      sourceHandle?: string | null
+    }>
   }
-  const nodes = def.nodes ?? []
-  const edges = def.edges ?? []
+  const nodes = (def.nodes ?? []).map((n) => ({
+    id: n.id,
+    type: n.type,
+    data: n.data ?? {},
+  }))
+  const edges = (def.edges ?? []).map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    sourceHandle: e.sourceHandle ?? null,
+  }))
 
-  const nodeMap = new Map(nodes.map((n) => [n.id as string, n]))
-  const outgoing = new Map<string, Array<Record<string, unknown>>>()
-  for (const e of edges) {
-    const src = e.source as string
-    if (!outgoing.has(src)) outgoing.set(src, [])
-    outgoing.get(src)!.push(e)
+  const ctx: Record<string, unknown> = {
+    ...(userData?.data ?? {}),
   }
-
-  const outcomes: Array<{
-    nodeId: string
-    type: string
-    label: string
-    status: string
-    detail: string
-  }> = []
-  const nodeOutcome = new Map<string, boolean>()
-  const triggers = nodes.filter((n) => n.type === "trigger")
-  const queue = triggers.map((n) => n.id as string)
-  const visited = new Set<string>()
-
-  for (const t of triggers) {
-    outcomes.push({
-      nodeId: t.id as string,
-      type: "trigger",
-      label:
-        ((t.data as Record<string, unknown>)?.trigger as string) ?? "trigger",
-      status: "executed",
-      detail: "Triggered",
-    })
-    nodeOutcome.set(t.id as string, true)
+  if (contentText !== undefined && contentText !== null) {
+    ctx.contentText = contentText
   }
 
-  while (queue.length > 0) {
-    const current = queue.shift()!
-    if (visited.has(current)) continue
-    visited.add(current)
-    const outs = outgoing.get(current) ?? []
-    for (const edge of outs) {
-      const targetId = edge.target as string
-      const targetNode = nodeMap.get(targetId)
-      if (!targetNode || visited.has(targetId)) continue
-      const sourceOutcome = nodeOutcome.get(current)
-      const sourceHandle = edge.sourceHandle as string | undefined
-      const sourceNode = nodeMap.get(current)
-      if (
-        sourceNode &&
-        (sourceNode.type === "rule" || sourceNode.type === "condition")
-      ) {
-        if (sourceHandle === "pass" && sourceOutcome === false) continue
-        if (sourceHandle === "fail" && sourceOutcome === true) continue
-        if (sourceHandle === "true" && sourceOutcome === false) continue
-        if (sourceHandle === "false" && sourceOutcome === true) continue
-      }
+  const steps = executeWorkflow(nodes, edges, ctx)
+  const nodeById = new Map(nodes.map((n) => [n.id, n]))
 
-      let pass = true
-      let detail = ""
-      const data = (targetNode.data as Record<string, unknown>) ?? {}
-      const ud = userData?.data ?? {}
-
-      if (targetNode.type === "rule") {
-        const rule = data.rule as string
-        const params = data.params as Record<string, unknown> | undefined
-        if (rule === "accountAge") {
-          pass =
-            ((ud.accountAgeDays as number) ?? 0) >=
-            ((params?.days as number) ?? 30)
-          detail = `Account ${ud.accountAgeDays}d (need ${(params?.days as number) ?? 30}d)`
-        } else if (rule === "minMergedPrs") {
-          pass =
-            ((ud.mergedPrs as number) ?? 0) >= ((params?.count as number) ?? 15)
-          detail = `${ud.mergedPrs} merged PRs (need ${(params?.count as number) ?? 15})`
-        } else if (rule === "repoActivityMinimum") {
-          pass =
-            ((ud.publicNonForkRepos as number) ?? 0) >=
-            ((params?.minRepos as number) ?? 3)
-          detail = `${ud.publicNonForkRepos} repos (need ${(params?.minRepos as number) ?? 3})`
-        } else if (rule === "requireProfileReadme") {
-          pass = Boolean(ud.hasProfileReadme)
-          detail = pass ? "README exists" : "No README"
-        } else if (rule === "contributorScore") {
-          pass =
-            ((ud.score as number) ?? 0) >= ((params?.minScore as number) ?? 50)
-          detail = `Score ${ud.score} (need ${(params?.minScore as number) ?? 50})`
-        } else {
-          pass = true
-          detail = "No simulation data"
-        }
-      } else if (targetNode.type === "condition") {
-        const field = data.field as string
-        const op = data.operator as string
-        const val = Number.parseFloat(String(data.value))
-        const actual = (ud[field] as number) ?? 0
-        if (op === ">") pass = actual > val
-        else if (op === ">=") pass = actual >= val
-        else if (op === "<") pass = actual < val
-        else if (op === "<=") pass = actual <= val
-        else if (op === "==") pass = actual === val
-        else if (op === "!=") pass = actual !== val
-        detail = `${field} is ${actual} (${op} ${val})`
-      } else if (targetNode.type === "logic") {
-        const gate = data.gate as string
-        const incoming = edges.filter((e) => e.target === targetId)
-        const inputs = incoming
-          .map((e) => nodeOutcome.get(e.source as string))
-          .filter((v) => v !== undefined) as boolean[]
-        if (gate === "AND") pass = inputs.length > 0 && inputs.every(Boolean)
-        else if (gate === "OR") pass = inputs.some(Boolean)
-        else if (gate === "NOT") pass = inputs.length > 0 && !inputs[0]
-        detail = `${gate}(${inputs.map((r) => (r ? "T" : "F")).join(", ")})`
-      } else if (targetNode.type === "action") {
-        detail = `Would: ${data.action as string}`
-        if (data.message) detail += ` — "${data.message}"`
-      } else {
-        detail = "Processed"
-      }
-
-      const status =
-        targetNode.type === "action" ? "executed" : pass ? "pass" : "fail"
-      outcomes.push({
-        nodeId: targetId,
-        type: targetNode.type as string,
-        label:
-          (data.rule as string) ??
-          (data.action as string) ??
-          (data.gate as string) ??
-          (targetNode.type as string),
-        status,
-        detail,
-      })
-      nodeOutcome.set(targetId, pass)
-      queue.push(targetId)
+  const outcomes = steps.map((step) => {
+    const node = nodeById.get(step.nodeId)
+    const data = node?.data ?? {}
+    return {
+      nodeId: step.nodeId,
+      type: step.type,
+      label: actionLabel(data),
+      status: step.status,
+      detail: step.detail,
     }
-  }
+  })
 
   const actions = outcomes.filter((o) => o.type === "action")
   const hasBlock = actions.some(

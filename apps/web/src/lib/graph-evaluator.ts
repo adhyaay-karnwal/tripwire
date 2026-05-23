@@ -20,7 +20,7 @@ export interface SimUserData {
   followers: number
   following: number
   publicRepos: number
-  publicNonForkRepos: number
+  nonForkRepos: number
   publicGists: number
   hasProfileReadme: boolean
   mergedPrs: number
