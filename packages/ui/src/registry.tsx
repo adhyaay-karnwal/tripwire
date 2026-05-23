@@ -303,7 +303,7 @@ function UserCardInner({
         <div className="flex items-center justify-between">
           <span className="text-tw-text-muted">Forks</span>
           <span className="text-tw-text-primary tabular-nums">
-            {fmtCompact(props.publicForkRepos)}
+            {fmtCompact(props.forkRepos)}
           </span>
         </div>
       </div>
