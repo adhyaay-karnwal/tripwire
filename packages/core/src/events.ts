@@ -7,6 +7,7 @@ import {
   type EventContentType,
 } from "@tripwire/db"
 import { sql } from "drizzle-orm"
+import { isBotOrGhost } from "./contributor-identity"
 
 interface LogEventOptions {
   repoId: string
@@ -51,6 +52,11 @@ interface LogEventOptions {
  * });
  */
 export async function logEvent(options: LogEventOptions) {
+  // GitHub Apps and the `ghost` deleted-user account are never real
+  // contributors — drop them at the ingest boundary so no downstream
+  // surface (visibility, insights, reputation) has to defend against them.
+  if (isBotOrGhost(options.targetGithubUsername)) return
+
   try {
     await db.insert(events).values({
       repoId: options.repoId,
@@ -76,11 +82,14 @@ export async function logEvent(options: LogEventOptions) {
  * Log multiple events in a single batch (used after pipeline evaluation).
  */
 export async function logEvents(eventList: LogEventOptions[]) {
-  if (eventList.length === 0) return
+  const filtered = eventList.filter(
+    (e) => !isBotOrGhost(e.targetGithubUsername)
+  )
+  if (filtered.length === 0) return
 
   try {
     await db.insert(events).values(
-      eventList.map((e) => ({
+      filtered.map((e) => ({
         repoId: e.repoId,
         action: e.action,
         severity: e.severity ?? "info",
@@ -96,7 +105,7 @@ export async function logEvents(eventList: LogEventOptions[]) {
     )
 
     // Update reputation for each pipeline event in the batch
-    for (const e of eventList) {
+    for (const e of filtered) {
       updateReputation(e).catch(() => {})
     }
   } catch (err) {
@@ -104,14 +113,28 @@ export async function logEvents(eventList: LogEventOptions[]) {
   }
 }
 
-// ─── Reputation tracking ─────────────────────────────────────
-
 const REPUTATION_ACTIONS = new Set<string>([
   "pipeline_blocked",
   "pipeline_allowed",
   "rule_near_miss",
   "blacklist_blocked",
 ])
+
+export interface ReputationUpdatedEvent {
+  repoId: string
+  username: string
+  githubUserId?: number
+}
+
+type ReputationUpdateHook = (event: ReputationUpdatedEvent) => unknown
+
+let reputationUpdateHook: ReputationUpdateHook | null = null
+
+export function registerReputationUpdateHook(
+  hook: ReputationUpdateHook
+): void {
+  reputationUpdateHook = hook
+}
 
 async function updateReputation(options: LogEventOptions) {
   if (!options.targetGithubUsername) return
@@ -124,6 +147,9 @@ async function updateReputation(options: LogEventOptions) {
   const isAllow = options.action === "pipeline_allowed"
   const isNearMiss = options.action === "rule_near_miss"
 
+  // `score` is owned by the rich-score pipeline (computeContributorScore via
+  // the visibility sync). Webhooks only bump counts — touching score here
+  // would clobber the rich value with a counter formula.
   try {
     await db
       .insert(githubReputation)
@@ -133,7 +159,6 @@ async function updateReputation(options: LogEventOptions) {
         totalBlocks: isBlock ? 1 : 0,
         totalAllows: isAllow ? 1 : 0,
         totalNearMisses: isNearMiss ? 1 : 0,
-        score: isAllow ? 1 : isBlock ? -3 : -1,
       })
       .onConflictDoUpdate({
         target: githubReputation.githubUsername,
@@ -147,13 +172,25 @@ async function updateReputation(options: LogEventOptions) {
           totalNearMisses: isNearMiss
             ? sql`${githubReputation.totalNearMisses} + 1`
             : githubReputation.totalNearMisses,
-          score: sql`${githubReputation.totalAllows}${isAllow ? sql` + 1` : sql``} - (${githubReputation.totalBlocks}${isBlock ? sql` + 1` : sql``}) * 3 - (${githubReputation.totalNearMisses}${isNearMiss ? sql` + 1` : sql``})`,
           githubUserId:
             options.targetGithubUserId ?? sql`${githubReputation.githubUserId}`,
           lastSeenAt: new Date(),
           updatedAt: new Date(),
         },
       })
+
+    if (reputationUpdateHook) {
+      try {
+        const result = reputationUpdateHook({
+          repoId: options.repoId,
+          username: options.targetGithubUsername,
+          githubUserId: options.targetGithubUserId,
+        })
+        if (result instanceof Promise) result.catch(() => {})
+      } catch {
+        // hook failures must not break event logging
+      }
+    }
   } catch (err) {
     console.error("[Events] Failed to update reputation:", err)
   }

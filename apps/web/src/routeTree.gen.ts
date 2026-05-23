@@ -19,6 +19,7 @@ import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as AppVisibilityRouteImport } from './routes/_app/visibility'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppSearchRouteImport } from './routes/_app/search'
 import { Route as AppRulesRouteImport } from './routes/_app/rules'
@@ -46,6 +47,7 @@ import { Route as AppSettingsBillingRouteImport } from './routes/_app/settings/b
 import { Route as AppSettingsAccountRouteImport } from './routes/_app/settings/account'
 import { Route as AppEventsEventIdRouteImport } from './routes/_app/events/$eventId'
 import { Route as AppChatChatIdRouteImport } from './routes/_app/chat/$chatId'
+import { Route as AppOrgHandleVisibilityRouteImport } from './routes/_app/$orgHandle/visibility'
 import { Route as AppOrgHandleIntegrationsRouteImport } from './routes/_app/$orgHandle/integrations'
 import { Route as AppOrgHandleInsightsRouteImport } from './routes/_app/$orgHandle/insights'
 import { Route as AppOrgHandleHomeRouteImport } from './routes/_app/$orgHandle/home'
@@ -117,6 +119,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppVisibilityRoute = AppVisibilityRouteImport.update({
+  id: '/visibility',
+  path: '/visibility',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
@@ -254,6 +261,11 @@ const AppChatChatIdRoute = AppChatChatIdRouteImport.update({
   id: '/chat/$chatId',
   path: '/chat/$chatId',
   getParentRoute: () => AppRoute,
+} as any)
+const AppOrgHandleVisibilityRoute = AppOrgHandleVisibilityRouteImport.update({
+  id: '/visibility',
+  path: '/visibility',
+  getParentRoute: () => AppOrgHandleRoute,
 } as any)
 const AppOrgHandleIntegrationsRoute =
   AppOrgHandleIntegrationsRouteImport.update({
@@ -398,6 +410,7 @@ export interface FileRoutesByFullPath {
   '/rules': typeof AppRulesRoute
   '/search': typeof AppSearchRoute
   '/settings': typeof AppSettingsRouteWithChildren
+  '/visibility': typeof AppVisibilityRoute
   '/api/chat': typeof ApiChatRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/inngest': typeof ApiInngestRoute
@@ -409,6 +422,7 @@ export interface FileRoutesByFullPath {
   '/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
+  '/$orgHandle/visibility': typeof AppOrgHandleVisibilityRoute
   '/chat/$chatId': typeof AppChatChatIdRoute
   '/events/$eventId': typeof AppEventsEventIdRoute
   '/settings/account': typeof AppSettingsAccountRoute
@@ -458,6 +472,7 @@ export interface FileRoutesByTo {
   '/rules': typeof AppRulesRoute
   '/search': typeof AppSearchRoute
   '/settings': typeof AppSettingsRouteWithChildren
+  '/visibility': typeof AppVisibilityRoute
   '/api/chat': typeof ApiChatRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/inngest': typeof ApiInngestRoute
@@ -468,6 +483,7 @@ export interface FileRoutesByTo {
   '/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
+  '/$orgHandle/visibility': typeof AppOrgHandleVisibilityRoute
   '/chat/$chatId': typeof AppChatChatIdRoute
   '/events/$eventId': typeof AppEventsEventIdRoute
   '/settings/account': typeof AppSettingsAccountRoute
@@ -520,6 +536,7 @@ export interface FileRoutesById {
   '/_app/rules': typeof AppRulesRoute
   '/_app/search': typeof AppSearchRoute
   '/_app/settings': typeof AppSettingsRouteWithChildren
+  '/_app/visibility': typeof AppVisibilityRoute
   '/api/chat': typeof ApiChatRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/inngest': typeof ApiInngestRoute
@@ -531,6 +548,7 @@ export interface FileRoutesById {
   '/_app/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/_app/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/_app/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
+  '/_app/$orgHandle/visibility': typeof AppOrgHandleVisibilityRoute
   '/_app/chat/$chatId': typeof AppChatChatIdRoute
   '/_app/events/$eventId': typeof AppEventsEventIdRoute
   '/_app/settings/account': typeof AppSettingsAccountRoute
@@ -582,6 +600,7 @@ export interface FileRouteTypes {
     | '/rules'
     | '/search'
     | '/settings'
+    | '/visibility'
     | '/api/chat'
     | '/api/feedback'
     | '/api/inngest'
@@ -593,6 +612,7 @@ export interface FileRouteTypes {
     | '/$orgHandle/home'
     | '/$orgHandle/insights'
     | '/$orgHandle/integrations'
+    | '/$orgHandle/visibility'
     | '/chat/$chatId'
     | '/events/$eventId'
     | '/settings/account'
@@ -642,6 +662,7 @@ export interface FileRouteTypes {
     | '/rules'
     | '/search'
     | '/settings'
+    | '/visibility'
     | '/api/chat'
     | '/api/feedback'
     | '/api/inngest'
@@ -652,6 +673,7 @@ export interface FileRouteTypes {
     | '/$orgHandle/home'
     | '/$orgHandle/insights'
     | '/$orgHandle/integrations'
+    | '/$orgHandle/visibility'
     | '/chat/$chatId'
     | '/events/$eventId'
     | '/settings/account'
@@ -703,6 +725,7 @@ export interface FileRouteTypes {
     | '/_app/rules'
     | '/_app/search'
     | '/_app/settings'
+    | '/_app/visibility'
     | '/api/chat'
     | '/api/feedback'
     | '/api/inngest'
@@ -714,6 +737,7 @@ export interface FileRouteTypes {
     | '/_app/$orgHandle/home'
     | '/_app/$orgHandle/insights'
     | '/_app/$orgHandle/integrations'
+    | '/_app/$orgHandle/visibility'
     | '/_app/chat/$chatId'
     | '/_app/events/$eventId'
     | '/_app/settings/account'
@@ -845,6 +869,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/visibility': {
+      id: '/_app/visibility'
+      path: '/visibility'
+      fullPath: '/visibility'
+      preLoaderRoute: typeof AppVisibilityRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/settings': {
       id: '/_app/settings'
@@ -1034,6 +1065,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/chat/$chatId'
       preLoaderRoute: typeof AppChatChatIdRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/$orgHandle/visibility': {
+      id: '/_app/$orgHandle/visibility'
+      path: '/visibility'
+      fullPath: '/$orgHandle/visibility'
+      preLoaderRoute: typeof AppOrgHandleVisibilityRouteImport
+      parentRoute: typeof AppOrgHandleRoute
     }
     '/_app/$orgHandle/integrations': {
       id: '/_app/$orgHandle/integrations'
@@ -1248,6 +1286,7 @@ interface AppOrgHandleRouteChildren {
   AppOrgHandleHomeRoute: typeof AppOrgHandleHomeRoute
   AppOrgHandleInsightsRoute: typeof AppOrgHandleInsightsRoute
   AppOrgHandleIntegrationsRoute: typeof AppOrgHandleIntegrationsRoute
+  AppOrgHandleVisibilityRoute: typeof AppOrgHandleVisibilityRoute
   AppOrgHandleAutomationsAutomationIdRoute: typeof AppOrgHandleAutomationsAutomationIdRoute
   AppOrgHandleAutomationsPreviewRoute: typeof AppOrgHandleAutomationsPreviewRoute
   AppOrgHandleEventsEventIdRoute: typeof AppOrgHandleEventsEventIdRoute
@@ -1260,6 +1299,7 @@ const AppOrgHandleRouteChildren: AppOrgHandleRouteChildren = {
   AppOrgHandleHomeRoute: AppOrgHandleHomeRoute,
   AppOrgHandleInsightsRoute: AppOrgHandleInsightsRoute,
   AppOrgHandleIntegrationsRoute: AppOrgHandleIntegrationsRoute,
+  AppOrgHandleVisibilityRoute: AppOrgHandleVisibilityRoute,
   AppOrgHandleAutomationsAutomationIdRoute:
     AppOrgHandleAutomationsAutomationIdRoute,
   AppOrgHandleAutomationsPreviewRoute: AppOrgHandleAutomationsPreviewRoute,
@@ -1299,6 +1339,7 @@ interface AppRouteChildren {
   AppRulesRoute: typeof AppRulesRoute
   AppSearchRoute: typeof AppSearchRoute
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
+  AppVisibilityRoute: typeof AppVisibilityRoute
   AppChatChatIdRoute: typeof AppChatChatIdRoute
   AppEventsEventIdRoute: typeof AppEventsEventIdRoute
   AppUsersUsernameRoute: typeof AppUsersUsernameRoute
@@ -1314,6 +1355,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppRulesRoute: AppRulesRoute,
   AppSearchRoute: AppSearchRoute,
   AppSettingsRoute: AppSettingsRouteWithChildren,
+  AppVisibilityRoute: AppVisibilityRoute,
   AppChatChatIdRoute: AppChatChatIdRoute,
   AppEventsEventIdRoute: AppEventsEventIdRoute,
   AppUsersUsernameRoute: AppUsersUsernameRoute,
