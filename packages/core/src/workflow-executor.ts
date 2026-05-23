@@ -102,11 +102,22 @@ export function executeWorkflow(
         const inputs = incomingEdges
           .map((e) => nodeOutcome.get(e.source))
           .filter((v) => v !== undefined) as boolean[]
+        const passedCount = inputs.filter(Boolean).length
+        const totalCount = inputs.length
 
-        if (gate === "AND") pass = inputs.length > 0 && inputs.every(Boolean)
-        else if (gate === "OR") pass = inputs.some(Boolean)
-        else if (gate === "NOT") pass = inputs.length > 0 && !inputs[0]
-        detail = `${gate}(${inputs.map((r) => (r ? "T" : "F")).join(", ")}) -> ${pass ? "TRUE" : "FALSE"}`
+        if (gate === "AND") {
+          pass = totalCount > 0 && passedCount === totalCount
+          detail = `${passedCount} of ${totalCount} ${totalCount === 1 ? "input" : "inputs"} passed (needs all)`
+        } else if (gate === "OR") {
+          pass = passedCount > 0
+          detail = `${passedCount} of ${totalCount} ${totalCount === 1 ? "input" : "inputs"} passed (needs any)`
+        } else if (gate === "NOT") {
+          pass = totalCount > 0 && !inputs[0]
+          detail =
+            totalCount === 0
+              ? "no input to invert"
+              : `input ${inputs[0] ? "passed" : "failed"} (inverted)`
+        }
       } else {
         const evaluator = getEvaluatorForNode(nodeType, targetNode.data)
         if (!evaluator) {

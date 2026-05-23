@@ -103,8 +103,8 @@ describe("workflow composition", () => {
     )
 
     const gate = steps.find((s) => s.nodeId === "g")
-    expect(gate?.detail).toContain("AND")
-    expect(gate?.detail).toContain("TRUE")
+    expect(gate?.status).toBe("pass")
+    expect(gate?.detail).toBe("2 of 2 inputs passed (needs all)")
     expect(steps.find((s) => s.nodeId === "a")?.status).toBe("executed")
   })
 
@@ -138,8 +138,7 @@ describe("workflow composition", () => {
     expect(steps.find((s) => s.nodeId === "r2")?.status).toBe("fail")
     const gate = steps.find((s) => s.nodeId === "g")
     expect(gate?.status).toBe("fail")
-    expect(gate?.detail).toContain("FALSE")
-    expect(gate?.detail).toContain("AND(")
+    expect(gate?.detail).toBe("1 of 2 inputs passed (needs all)")
   })
 
   it("regression: repoActivityMinimum reads from nonForkRepos signal", () => {
@@ -254,6 +253,6 @@ describe("workflow composition", () => {
     )
     const gateStep = passSteps.find((s) => s.nodeId === "g")
     expect(gateStep?.status).toBe("fail")
-    expect(gateStep?.detail).toContain("NOT(T) -> FALSE")
+    expect(gateStep?.detail).toBe("input passed (inverted)")
   })
 })

@@ -524,6 +524,95 @@ function SimulationPanel({
   const failCount = visibleResults.filter((r) => r.status === "fail").length
   const execCount = visibleResults.filter((r) => r.status === "executed").length
 
+  const displayRows = useMemo(() => {
+    type Row =
+      | { kind: "single"; result: SimNodeResult }
+      | { kind: "divider"; gate: SimNodeResult }
+    const gateInputs = new Map<string, SimNodeResult[]>()
+    const usedAsInput = new Set<string>()
+    for (const r of visibleResults) {
+      const node = nodes.find((n) => n.id === r.nodeId)
+      if (node?.type !== "logic") continue
+      const ids = edges
+        .filter((e) => e.target === r.nodeId)
+        .map((e) => e.source)
+      const ins = visibleResults.filter((vr) => ids.includes(vr.nodeId))
+      gateInputs.set(r.nodeId, ins)
+      for (const inp of ins) usedAsInput.add(inp.nodeId)
+    }
+
+    const out: Row[] = []
+    const emitted = new Set<string>()
+    for (const r of visibleResults) {
+      if (emitted.has(r.nodeId)) continue
+      if (usedAsInput.has(r.nodeId)) continue
+      const node = nodes.find((n) => n.id === r.nodeId)
+      if (node?.type === "logic") {
+        const ins = gateInputs.get(r.nodeId) ?? []
+        if (ins.length === 2) {
+          out.push({ kind: "single", result: ins[0] })
+          out.push({ kind: "divider", gate: r })
+          out.push({ kind: "single", result: ins[1] })
+          emitted.add(ins[0].nodeId)
+          emitted.add(ins[1].nodeId)
+          emitted.add(r.nodeId)
+          continue
+        }
+        if (ins.length === 1) {
+          out.push({ kind: "single", result: ins[0] })
+          out.push({ kind: "divider", gate: r })
+          emitted.add(ins[0].nodeId)
+          emitted.add(r.nodeId)
+          continue
+        }
+        if (ins.length >= 3) {
+          for (const inp of ins) {
+            out.push({ kind: "single", result: inp })
+            emitted.add(inp.nodeId)
+          }
+          out.push({ kind: "divider", gate: r })
+          emitted.add(r.nodeId)
+          continue
+        }
+      }
+      out.push({ kind: "single", result: r })
+      emitted.add(r.nodeId)
+    }
+    return out
+  }, [visibleResults, nodes, edges])
+
+  const labelFor = (r: SimNodeResult) => {
+    const node = nodes.find((n) => n.id === r.nodeId)
+    if (!node) return "Node"
+    if (node.type === "trigger")
+      return triggerLabels[node.data.trigger as string] ?? "Trigger"
+    if (node.type === "rule")
+      return ruleLabels[node.data.rule as string] ?? "Rule"
+    if (node.type === "action")
+      return actionLabels[node.data.action as string] ?? "Action"
+    if (node.type === "logic") return `${node.data.gate as string} Gate`
+    if (node.type === "condition") return "Condition"
+    if (node.type === "delay") return "Delay"
+    if (node.type === "transform") return "Transform"
+    return node.type ?? "Node"
+  }
+
+  const statusTextFor = (s: SimNodeResult["status"]) =>
+    s === "pass"
+      ? "pass"
+      : s === "fail"
+        ? "fail"
+        : s === "executed"
+          ? "exec"
+          : "skip"
+
+  const statusColorFor = (s: SimNodeResult["status"]) =>
+    s === "pass"
+      ? "text-[#FFFFFF59]"
+      : s === "fail"
+        ? "text-tw-error"
+        : "text-[#FFFFFF40]"
+
   const groupedInputs = useMemo(() => {
     const groups: Record<string, SimInput[]> = {}
     for (const input of simInputs) {
@@ -763,65 +852,76 @@ function SimulationPanel({
             )}
           </div>
           <div className="flex flex-col gap-0.5 px-3 pb-3">
-            {visibleResults.map((r, i) => {
-              const node = nodes.find((n) => n.id === r.nodeId)
-              const label =
-                node?.type === "trigger"
-                  ? (triggerLabels[node.data.trigger as string] ?? "Trigger")
-                  : node?.type === "rule"
-                    ? (ruleLabels[node.data.rule as string] ?? "Rule")
-                    : node?.type === "action"
-                      ? (actionLabels[node.data.action as string] ?? "Action")
-                      : node?.type === "logic"
-                        ? (node.data.gate as string)
-                        : node?.type === "condition"
-                          ? "Condition"
-                          : node?.type === "delay"
-                            ? "Delay"
-                            : node?.type === "transform"
-                              ? "Transform"
-                              : (node?.type ?? "Node")
-              const statusText =
-                r.status === "pass"
-                  ? "pass"
-                  : r.status === "fail"
-                    ? "fail"
-                    : r.status === "executed"
-                      ? "exec"
-                      : "skip"
-              const statusColor =
-                r.status === "pass"
-                  ? "text-[#FFFFFF59]"
-                  : r.status === "fail"
-                    ? "text-tw-error"
-                    : "text-[#FFFFFF40]"
-              const isLatest = i === visibleResults.length - 1 && isAnimating
-              const isDelayWaiting =
-                isLatest && r.pauseMs != null && r.pauseMs > 400
-              return (
-                <div
-                  key={r.nodeId}
-                  className={`rounded-lg px-2.5 py-2 transition-colors duration-200 ${
-                    isLatest ? "bg-tw-card" : "hover:bg-[#ffffff04]"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[13px] text-tw-text-primary">
-                      {label}
-                    </span>
-                    {isDelayWaiting ? (
-                      <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-[#FFFFFF40] border-t-transparent" />
-                    ) : (
-                      <span
-                        className={`text-[10px] tabular-nums ${statusColor} shrink-0`}
-                      >
-                        {statusText}
+            {displayRows.map((row) => {
+              if (row.kind === "single") {
+                const r = row.result
+                const latestIdx = visibleResults.length - 1
+                const isLatest =
+                  isAnimating && r.nodeId === visibleResults[latestIdx]?.nodeId
+                const isDelayWaiting =
+                  isLatest && r.pauseMs != null && r.pauseMs > 400
+                return (
+                  <div
+                    key={r.nodeId}
+                    className={`rounded-lg px-2.5 py-2 transition-colors duration-200 ${
+                      isLatest ? "bg-tw-card" : "hover:bg-[#ffffff04]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[13px] text-tw-text-primary">
+                        {labelFor(r)}
                       </span>
+                      {isDelayWaiting ? (
+                        <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-[#FFFFFF40] border-t-transparent" />
+                      ) : (
+                        <span
+                          className={`text-[10px] tabular-nums ${statusColorFor(r.status)} shrink-0`}
+                        >
+                          {statusTextFor(r.status)}
+                        </span>
+                      )}
+                    </div>
+                    {r.detail && (
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-[#FFFFFF40]">
+                        {r.detail}
+                      </p>
                     )}
                   </div>
-                  {r.detail && (
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-[#FFFFFF40]">
-                      {r.detail}
+                )
+              }
+
+              const { gate } = row
+              const latestIdx = visibleResults.length - 1
+              const latestId = visibleResults[latestIdx]?.nodeId
+              const isLatest = isAnimating && gate.nodeId === latestId
+              const lineColor =
+                gate.status === "fail"
+                  ? "bg-tw-error/40"
+                  : gate.status === "pass"
+                    ? "bg-white/15"
+                    : "bg-white/10"
+              return (
+                <div
+                  key={gate.nodeId}
+                  className={`flex flex-col items-stretch gap-0.5 px-1 py-1.5 ${
+                    isLatest ? "rounded-md bg-tw-card/40" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`h-px flex-1 ${lineColor}`} />
+                    <span className="text-[11px] font-medium text-tw-text-secondary">
+                      {labelFor(gate)}
+                    </span>
+                    <span
+                      className={`text-[10px] tabular-nums ${statusColorFor(gate.status)}`}
+                    >
+                      {statusTextFor(gate.status)}
+                    </span>
+                    <div className={`h-px flex-1 ${lineColor}`} />
+                  </div>
+                  {gate.detail && (
+                    <p className="text-center text-[10px] leading-snug text-[#FFFFFF40]">
+                      {gate.detail}
                     </p>
                   )}
                 </div>
