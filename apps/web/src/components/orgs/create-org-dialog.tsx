@@ -114,7 +114,11 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-md">
+      <DialogPopup
+        bottomStickOnMobile={false}
+        showCloseButton={false}
+        className="max-w-sm"
+      >
         <DialogHeader>
           <DialogTitle>Create organization</DialogTitle>
           <DialogDescription>
@@ -124,25 +128,21 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
         <DialogPanel>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[12px] font-medium text-tw-text-secondary">
-                Name
-              </label>
+              <label className="text-[12px] text-tw-text-muted">Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Acme Inc."
                 autoComplete="off"
-                className="h-9 w-full rounded-lg border border-tw-border bg-tw-inner px-2.5 text-[13px] text-tw-text-primary outline-none placeholder:text-tw-text-muted focus:border-tw-accent"
+                className="h-9 w-full rounded-lg border border-[#27272A] bg-tw-inner px-2.5 text-[13px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary focus:border-tw-accent"
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[12px] font-medium text-tw-text-secondary">
-                URL
-              </label>
-              <div className="flex items-stretch overflow-hidden rounded-lg border border-tw-border bg-tw-inner focus-within:border-tw-accent">
-                <span className="flex items-center bg-tw-inner px-2.5 font-mono text-[12px] text-tw-text-muted">
+              <label className="text-[12px] text-tw-text-muted">URL</label>
+              <div className="flex items-stretch overflow-hidden rounded-lg border border-[#27272A] bg-tw-inner focus-within:border-tw-accent">
+                <span className="flex items-center px-2.5 font-mono text-[12px] text-tw-text-muted">
                   tripwire.dev/
                 </span>
                 <input
@@ -155,45 +155,56 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
                   placeholder="acme"
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-9 flex-1 bg-transparent px-0 font-mono text-[13px] text-tw-text-primary outline-none placeholder:text-tw-text-muted"
+                  className="h-9 flex-1 bg-transparent pr-2.5 font-mono text-[13px] text-tw-text-primary outline-none placeholder:text-tw-text-tertiary"
                 />
               </div>
-              {error ? (
-                <span className="text-[11px] text-tw-error">{error}</span>
-              ) : remoteCheck.isFetching ? (
-                <span className="text-[11px] text-tw-text-muted">
-                  Checking availability…
-                </span>
-              ) : remoteCheck.data?.available && slug.length > 0 ? (
-                <span className="text-[11px] text-tw-success">Available</span>
-              ) : (
-                <span className="text-[11px] text-tw-text-muted">
-                  {FORMAT_HINT}
-                </span>
-              )}
+              <SlugStatus
+                error={error}
+                checking={remoteCheck.isFetching}
+                available={
+                  remoteCheck.data?.available === true && slug.length > 0
+                }
+              />
             </div>
           </div>
         </DialogPanel>
         <DialogFooter variant="bare">
-          <DialogClose
-            render={
-              <Button variant="ghost" size="sm" type="button">
-                Cancel
-              </Button>
-            }
-          />
+          <DialogClose className="flex h-8 items-center rounded-lg border border-[#27272A] px-3 text-[13px] font-medium text-tw-text-secondary transition-colors hover:bg-tw-hover">
+            Cancel
+          </DialogClose>
           <Button
-            variant="default"
-            size="sm"
+            variant="ghost"
             type="button"
             disabled={!canSubmit}
             loading={submitting}
             onClick={handleSubmit}
+            className="flex h-8 items-center rounded-lg bg-white px-3 text-[13px] font-medium text-black transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Create organization
+            Create
           </Button>
         </DialogFooter>
       </DialogPopup>
     </Dialog>
   )
+}
+
+function SlugStatus({
+  error,
+  checking,
+  available,
+}: {
+  error: string | null
+  checking: boolean
+  available: boolean
+}) {
+  if (error) return <span className="text-[11px] text-tw-error">{error}</span>
+  if (checking)
+    return (
+      <span className="text-[11px] text-tw-text-muted">
+        Checking availability…
+      </span>
+    )
+  if (available)
+    return <span className="text-[11px] text-tw-success">Available</span>
+  return <span className="text-[11px] text-tw-text-muted">{FORMAT_HINT}</span>
 }

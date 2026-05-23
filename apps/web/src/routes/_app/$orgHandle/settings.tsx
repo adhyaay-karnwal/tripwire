@@ -175,7 +175,7 @@ function MembersSection({
 }) {
   return (
     <SectionShell
-      title={`Members${members.length > 0 ? ` · ${members.length}` : ""}`}
+      title={`Members${members.length > 0 ? ` (${members.length})` : ""}`}
       description="Everyone with access to this organization."
     >
       <div className="overflow-clip rounded-xl bg-tw-card">
