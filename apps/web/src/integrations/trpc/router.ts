@@ -14,6 +14,7 @@ import { preferencesRouter } from "./routers/preferences"
 import { workflowsRouter } from "./routers/workflows"
 import { customRulesRouter } from "./routers/custom-rules"
 import { researchRouter } from "./routers/research"
+import { adminReputationRouter } from "./routers/admin-reputation"
 import { visibilityRouter } from "./routers/visibility"
 import { onboardingRouter } from "./routers/onboarding"
 import { authRouter } from "./routers/auth"
@@ -35,6 +36,7 @@ export const trpcRouter = createTRPCRouter({
   workflows: workflowsRouter,
   customRules: customRulesRouter,
   research: researchRouter,
+  adminReputation: adminReputationRouter,
   visibility: visibilityRouter,
   onboarding: onboardingRouter,
   auth: authRouter,

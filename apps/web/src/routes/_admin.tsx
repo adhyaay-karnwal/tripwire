@@ -30,6 +30,13 @@ function AdminShell() {
               Research
             </Link>
             <Link
+              to="/admin/reputation"
+              activeProps={{ className: "text-white" }}
+              inactiveProps={{ className: "text-zinc-400 hover:text-white" }}
+            >
+              Reputation
+            </Link>
+            <Link
               to="/home"
               className="rounded border border-white/10 px-3 py-1 text-xs text-zinc-300 hover:bg-white/5"
             >

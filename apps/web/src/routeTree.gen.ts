@@ -57,6 +57,7 @@ import { Route as AppOrgHandleSettingsRouteImport } from './routes/_app/$orgHand
 import { Route as AppOrgHandleIntegrationsRouteImport } from './routes/_app/$orgHandle/integrations'
 import { Route as AppOrgHandleInsightsRouteImport } from './routes/_app/$orgHandle/insights'
 import { Route as AppOrgHandleHomeRouteImport } from './routes/_app/$orgHandle/home'
+import { Route as AdminAdminReputationRouteImport } from './routes/_admin/admin/reputation'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceSplatRouteImport } from './routes/[.well-known]/oauth-protected-resource/$'
 import { Route as Char91DotwellKnownChar93OauthAuthorizationServerSplatRouteImport } from './routes/[.well-known]/oauth-authorization-server/$'
 import { Route as AppOrgHandleRulesRouteRouteImport } from './routes/_app/$orgHandle/rules/route'
@@ -319,6 +320,11 @@ const AppOrgHandleHomeRoute = AppOrgHandleHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => AppOrgHandleRoute,
 } as any)
+const AdminAdminReputationRoute = AdminAdminReputationRouteImport.update({
+  id: '/admin/reputation',
+  path: '/admin/reputation',
+  getParentRoute: () => AdminRoute,
+} as any)
 const Char91DotwellKnownChar93OauthProtectedResourceSplatRoute =
   Char91DotwellKnownChar93OauthProtectedResourceSplatRouteImport.update({
     id: '/$',
@@ -456,6 +462,7 @@ export interface FileRoutesByFullPath {
   '/$orgHandle/rules': typeof AppOrgHandleRulesRouteRouteWithChildren
   '/.well-known/oauth-authorization-server/$': typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
   '/.well-known/oauth-protected-resource/$': typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
+  '/admin/reputation': typeof AdminAdminReputationRoute
   '/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
@@ -523,6 +530,7 @@ export interface FileRoutesByTo {
   '/oauth/consent': typeof OauthConsentRoute
   '/.well-known/oauth-authorization-server/$': typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
   '/.well-known/oauth-protected-resource/$': typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
+  '/admin/reputation': typeof AdminAdminReputationRoute
   '/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
@@ -594,6 +602,7 @@ export interface FileRoutesById {
   '/_app/$orgHandle/rules': typeof AppOrgHandleRulesRouteRouteWithChildren
   '/.well-known/oauth-authorization-server/$': typeof Char91DotwellKnownChar93OauthAuthorizationServerSplatRoute
   '/.well-known/oauth-protected-resource/$': typeof Char91DotwellKnownChar93OauthProtectedResourceSplatRoute
+  '/_admin/admin/reputation': typeof AdminAdminReputationRoute
   '/_app/$orgHandle/home': typeof AppOrgHandleHomeRoute
   '/_app/$orgHandle/insights': typeof AppOrgHandleInsightsRoute
   '/_app/$orgHandle/integrations': typeof AppOrgHandleIntegrationsRoute
@@ -664,6 +673,7 @@ export interface FileRouteTypes {
     | '/$orgHandle/rules'
     | '/.well-known/oauth-authorization-server/$'
     | '/.well-known/oauth-protected-resource/$'
+    | '/admin/reputation'
     | '/$orgHandle/home'
     | '/$orgHandle/insights'
     | '/$orgHandle/integrations'
@@ -731,6 +741,7 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/.well-known/oauth-authorization-server/$'
     | '/.well-known/oauth-protected-resource/$'
+    | '/admin/reputation'
     | '/$orgHandle/home'
     | '/$orgHandle/insights'
     | '/$orgHandle/integrations'
@@ -801,6 +812,7 @@ export interface FileRouteTypes {
     | '/_app/$orgHandle/rules'
     | '/.well-known/oauth-authorization-server/$'
     | '/.well-known/oauth-protected-resource/$'
+    | '/_admin/admin/reputation'
     | '/_app/$orgHandle/home'
     | '/_app/$orgHandle/insights'
     | '/_app/$orgHandle/integrations'
@@ -1209,6 +1221,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgHandleHomeRouteImport
       parentRoute: typeof AppOrgHandleRoute
     }
+    '/_admin/admin/reputation': {
+      id: '/_admin/admin/reputation'
+      path: '/admin/reputation'
+      fullPath: '/admin/reputation'
+      preLoaderRoute: typeof AdminAdminReputationRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/.well-known/oauth-protected-resource/$': {
       id: '/.well-known/oauth-protected-resource/$'
       path: '/$'
@@ -1371,12 +1390,14 @@ const OnboardingRouteRouteWithChildren = OnboardingRouteRoute._addFileChildren(
 )
 
 interface AdminRouteChildren {
+  AdminAdminReputationRoute: typeof AdminAdminReputationRoute
   AdminAdminResearchRunIdRoute: typeof AdminAdminResearchRunIdRoute
   AdminAdminResearchNewRoute: typeof AdminAdminResearchNewRoute
   AdminAdminResearchIndexRoute: typeof AdminAdminResearchIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAdminReputationRoute: AdminAdminReputationRoute,
   AdminAdminResearchRunIdRoute: AdminAdminResearchRunIdRoute,
   AdminAdminResearchNewRoute: AdminAdminResearchNewRoute,
   AdminAdminResearchIndexRoute: AdminAdminResearchIndexRoute,
