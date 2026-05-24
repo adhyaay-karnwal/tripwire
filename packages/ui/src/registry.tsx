@@ -10,162 +10,8 @@ import {
   RegistryStarIcon10,
 } from "./icons/registry-icons"
 import { catalog, type UserCardSlideProps } from "./catalog"
-import { cn } from "./utils"
-
-/**
- * Component Registry for AI tool results
- * Maps catalog components to styled React implementations
- */
-
-/** Format large numbers compactly: 1200 → "1.2K", 1500000 → "1.5M" */
-function fmtCompact(n: number): string {
-  if (n >= 1_000_000_000)
-    return `${(n / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B`
-  if (n >= 1_000_000)
-    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`
-  return String(n)
-}
-
-/** Lightweight markdown-to-JSX for tool card bodies (no deps). */
-function MiniMarkdown({ content }: { content: string }) {
-  const lines = content.split("\n")
-  const elements: React.ReactNode[] = []
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const trimmed = line.trim()
-    if (!trimmed) {
-      elements.push(<br key={i} />)
-      continue
-    }
-
-    // Block quote
-    if (trimmed.startsWith("> ")) {
-      elements.push(
-        <div
-          key={i}
-          className="border-l-2 border-tw-border pl-2 text-tw-text-muted italic"
-        >
-          <InlineMarkdown text={trimmed.slice(2)} />
-        </div>
-      )
-      continue
-    }
-
-    // Heading
-    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)/)
-    if (headingMatch) {
-      const level = headingMatch[1].length
-      const cls =
-        level === 1
-          ? "text-[12px] font-semibold text-tw-text-primary"
-          : "text-[11px] font-medium text-tw-text-secondary"
-      elements.push(
-        <div key={i} className={cls}>
-          <InlineMarkdown text={headingMatch[2]} />
-        </div>
-      )
-      continue
-    }
-
-    // List item
-    if (trimmed.match(/^[-*]\s/)) {
-      elements.push(
-        <div key={i} className="flex items-start gap-1.5">
-          <span className="mt-px shrink-0 text-tw-text-muted">·</span>
-          <span>
-            <InlineMarkdown text={trimmed.replace(/^[-*]\s/, "")} />
-          </span>
-        </div>
-      )
-      continue
-    }
-
-    // Code block markers
-    if (trimmed.startsWith("```")) {
-      // Collect lines until closing ```
-      const codeLines: string[] = []
-      i++
-      while (i < lines.length && !lines[i].trim().startsWith("```")) {
-        codeLines.push(lines[i])
-        i++
-      }
-      elements.push(
-        <pre
-          key={i}
-          className="overflow-x-auto rounded-md bg-[#FAFAFA08] px-2 py-1.5 font-mono text-[10px] whitespace-pre-wrap"
-        >
-          {codeLines.join("\n")}
-        </pre>
-      )
-      continue
-    }
-
-    // Normal paragraph
-    elements.push(
-      <div key={i}>
-        <InlineMarkdown text={trimmed} />
-      </div>
-    )
-  }
-
-  return <div className="flex flex-col gap-0.5">{elements}</div>
-}
-
-/** Handles inline markdown: **bold**, `code`, [links](url) */
-function InlineMarkdown({ text }: { text: string }) {
-  const parts: React.ReactNode[] = []
-  // Process inline patterns
-  const regex = /(\*\*(.+?)\*\*|`(.+?)`|\[(.+?)\]\((.+?)\))/g
-  let lastIndex = 0
-  let match
-
-  while ((match = regex.exec(text)) !== null) {
-    // Text before match
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index))
-    }
-    if (match[2]) {
-      // Bold
-      parts.push(
-        <strong key={match.index} className="font-medium text-tw-text-primary">
-          {match[2]}
-        </strong>
-      )
-    } else if (match[3]) {
-      // Inline code
-      parts.push(
-        <code
-          key={match.index}
-          className="rounded bg-[#FAFAFA10] px-1 py-px font-mono text-[10px]"
-        >
-          {match[3]}
-        </code>
-      )
-    } else if (match[4] && match[5]) {
-      // Link
-      parts.push(
-        <a
-          key={match.index}
-          href={match[5]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-tw-accent hover:underline"
-        >
-          {match[4]}
-        </a>
-      )
-    }
-    lastIndex = match.index + match[0].length
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex))
-  }
-
-  return <>{parts}</>
-}
+import { cn, formatCompact } from "./utils"
+import { MiniMarkdown } from "./mini-markdown"
 
 function UserCardInner({
   props,
@@ -267,43 +113,43 @@ function UserCardInner({
         <div className="flex items-center justify-between">
           <span className="text-tw-text-muted">Repos</span>
           <span className="text-tw-text-primary tabular-nums">
-            {fmtCompact(props.publicRepos)}
+            {formatCompact(props.publicRepos)}
           </span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-tw-text-muted">Followers</span>
           <span className="text-tw-text-primary tabular-nums">
-            {fmtCompact(props.followers)}
+            {formatCompact(props.followers)}
           </span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-tw-text-muted">1y contrib</span>
           <span className="text-tw-text-primary tabular-nums">
-            {fmtCompact(props.contributionsLastYear)}
+            {formatCompact(props.contributionsLastYear)}
           </span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-tw-text-muted">Merged PRs</span>
           <span className="text-tw-text-primary tabular-nums">
-            {fmtCompact(props.mergedPrs)}
+            {formatCompact(props.mergedPrs)}
           </span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-tw-text-muted">Closed</span>
           <span className="text-tw-text-primary tabular-nums">
-            {fmtCompact(props.closedUnmergedPrs)}
+            {formatCompact(props.closedUnmergedPrs)}
           </span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-tw-text-muted">PRs here</span>
           <span className="text-tw-text-primary tabular-nums">
-            {fmtCompact(props.prsToThisRepo)}
+            {formatCompact(props.prsToThisRepo)}
           </span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-tw-text-muted">Forks</span>
           <span className="text-tw-text-primary tabular-nums">
-            {fmtCompact(props.forkRepos)}
+            {formatCompact(props.forkRepos)}
           </span>
         </div>
       </div>
@@ -312,17 +158,17 @@ function UserCardInner({
         <div className="flex items-center gap-2 text-[11px]">
           {props.allowedCount > 0 && (
             <span className="text-tw-success tabular-nums">
-              {fmtCompact(props.allowedCount)} allowed
+              {formatCompact(props.allowedCount)} allowed
             </span>
           )}
           {props.blockedCount > 0 && (
             <span className="text-tw-error tabular-nums">
-              {fmtCompact(props.blockedCount)} blocked
+              {formatCompact(props.blockedCount)} blocked
             </span>
           )}
           {props.nearMissCount > 0 && (
             <span className="text-tw-warning tabular-nums">
-              {fmtCompact(props.nearMissCount)} near-miss
+              {formatCompact(props.nearMissCount)} near-miss
             </span>
           )}
         </div>
@@ -1494,7 +1340,7 @@ export const { registry } = defineRegistry(catalog, {
                     )}
                     {repo.stars > 0 && (
                       <span className="text-tw-text-muted tabular-nums">
-                        {fmtCompact(repo.stars)}
+                        {formatCompact(repo.stars)}
                       </span>
                     )}
                   </div>
@@ -1511,19 +1357,19 @@ export const { registry } = defineRegistry(catalog, {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
                       {repo.stars > 0 && (
                         <span className="text-tw-text-secondary">
-                          {fmtCompact(repo.stars)} star
+                          {formatCompact(repo.stars)} star
                           {repo.stars !== 1 ? "s" : ""}
                         </span>
                       )}
                       {repo.forks > 0 && (
                         <span className="text-tw-text-secondary">
-                          {fmtCompact(repo.forks)} fork
+                          {formatCompact(repo.forks)} fork
                           {repo.forks !== 1 ? "s" : ""}
                         </span>
                       )}
                       {repo.openIssuesCount > 0 && (
                         <span className="text-tw-text-secondary">
-                          {fmtCompact(repo.openIssuesCount)} open issue
+                          {formatCompact(repo.openIssuesCount)} open issue
                           {repo.openIssuesCount !== 1 ? "s" : ""}
                         </span>
                       )}
@@ -1569,7 +1415,7 @@ export const { registry } = defineRegistry(catalog, {
           <div className="flex items-baseline justify-between">
             <div className="text-[12px] text-tw-text-muted">Activity</div>
             <div className="text-[18px] font-semibold text-tw-text-primary tabular-nums">
-              {fmtCompact(props.totalContributions)}
+              {formatCompact(props.totalContributions)}
               <span className="ml-1 text-[11px] text-tw-text-muted">
                 contributions
               </span>
@@ -1609,7 +1455,7 @@ export const { registry } = defineRegistry(catalog, {
                   {repo.stars > 0 && (
                     <span className="ml-auto flex items-center gap-0.5 text-[10px] text-tw-text-muted tabular-nums">
                       <RegistryStarIcon10 className="text-tw-text-muted" />
-                      {fmtCompact(repo.stars)}
+                      {formatCompact(repo.stars)}
                     </span>
                   )}
                 </a>

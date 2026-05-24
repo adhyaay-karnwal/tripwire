@@ -14,6 +14,12 @@ import type {
   ParsedCommand,
 } from "#/lib/chat/commands"
 
+import {
+  actionResultMessage,
+  makeToolMessage,
+  makeUserMessage,
+} from "#/lib/chat/messages"
+
 type RunSlashResult = {
   messages: unknown[]
   replace?: boolean
@@ -51,65 +57,6 @@ type RunResult =
   | { kind: "done" }
   | { kind: "needs-confirmation"; confirmation: MutationConfirmation }
   | { kind: "error"; message: string }
-
-function makeSpec(type: string, props: Record<string, unknown>) {
-  return {
-    root: "main",
-    elements: {
-      main: { type, props, children: [] },
-    },
-  }
-}
-
-function makeUserMessage(text: string): UIMessage {
-  return {
-    id: crypto.randomUUID(),
-    role: "user",
-    parts: [{ type: "text", text }],
-  } as UIMessage
-}
-
-function makeToolMessage(opts: {
-  toolName: string
-  args: Record<string, unknown>
-  state: "input-streaming" | "output-available" | "output-error"
-  output?: unknown
-  errorText?: string
-}): UIMessage {
-  const toolCallId = crypto.randomUUID()
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    parts: [
-      {
-        type: `tool-${opts.toolName}`,
-        toolCallId,
-        state: opts.state,
-        input: opts.args,
-        ...(opts.output !== undefined ? { output: opts.output } : {}),
-        ...(opts.errorText ? { errorText: opts.errorText } : {}),
-      } as never,
-    ],
-  } as UIMessage
-}
-
-function actionResultMessage(opts: {
-  action: string
-  success: boolean
-  message: string
-  username?: string
-}): UIMessage {
-  return makeToolMessage({
-    toolName: opts.action,
-    args: opts.username ? { username: opts.username } : {},
-    state: "output-available",
-    output: makeSpec("ActionResult", {
-      success: opts.success,
-      message: opts.message,
-      action: opts.action,
-    }),
-  })
-}
 
 interface CommandRunnerAdapter {
   chatId?: string

@@ -1,37 +1,29 @@
 import {
   createContext,
-  useContext,
-  useState,
   useCallback,
-  useMemo,
+  useContext,
   useRef,
+  useState,
   type ReactNode,
 } from "react"
-import { useChat, Provider as ChatStoreProvider } from "@ai-sdk-tools/store"
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-} from "ai"
-import type { UIMessage, SerializedMessage } from "#/types/chat"
+import { Provider as ChatStoreProvider } from "@ai-sdk-tools/store"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useWorkspace } from "#/providers/workspace-context"
-import { useRouterState } from "@tanstack/react-router"
-import { useCustomer } from "autumn-js/react"
 import { useTRPC } from "#/integrations/trpc/react"
+import { useChatEngine } from "#/lib/chat/use-chat-engine"
 import {
-  broadcastWorkflowMutation,
-  extractWorkflowIdsFromMessages,
   broadcastRuleMutation,
+  broadcastWorkflowMutation,
   extractRuleIdsFromMessages,
+  extractWorkflowIdsFromMessages,
 } from "#/lib/workflow/events"
-import { extractChatTitle } from "#/lib/chat/extract-title"
+import type { UIMessage } from "#/types/chat"
 
 export interface WorkflowContext {
   workflowId: string
 }
 
 interface ChatContextValue {
-  // State
   messages: UIMessage[]
   isLoading: boolean
   isOpen: boolean
@@ -42,7 +34,6 @@ interface ChatContextValue {
   repoId: string | undefined
   workflowContext: WorkflowContext | null
 
-  // Actions
   sendMessage: (content: string) => void
   respondToToolApproval: (approvalId: string, approved: boolean) => void
   open: () => void
@@ -107,23 +98,12 @@ function setStoredValue(key: string, value: string): void {
 
 function ChatProviderClient({ children }: ChatProviderProps) {
   const { repo, repos, setRepo } = useWorkspace()
-  const currentPath = useRouterState({ select: (s) => s.location.pathname })
   const trpc = useTRPC()
   const queryClient = useQueryClient()
   const [isOpen, setIsOpen] = useState(() => {
     return getStoredValue(STORAGE_KEY_OPEN) === "true"
   })
-  const [chatError, setChatError] = useState<Error | null>(null)
-  const [quotaExhaustedByError, setQuotaExhaustedByError] = useState(false)
 
-  // Check quota proactively via Autumn's customer data
-  const { data: customer, refetch: refetchCustomer } = useCustomer()
-  const aiBalance = customer?.balances?.ai_credits
-  const isQuotaExhausted =
-    quotaExhaustedByError ||
-    (aiBalance != null && aiBalance.remaining <= 0 && !aiBalance.unlimited)
-
-  // Persist conversation ID so it survives reload
   const [conversationId, setConversationId] = useState(() => {
     const stored = getStoredValue(STORAGE_KEY_CONV)
     if (stored) return stored
@@ -137,14 +117,12 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 
   // When a persisted chat is loaded, pin to the repoId it was created against
   // so subsequent /api/chat requests target that repo even if the user has
-  // since switched workspace. `null` means "fall back to current workspace
-  // repo" (legacy conversations with no recorded repoId, or fresh chats).
+  // since switched workspace.
   const [pinnedRepoId, setPinnedRepoId] = useState<string | null>(null)
 
   // Track whether we've created the DB row for this conversation
   const createdConvIds = useRef(new Set<string>())
 
-  // Load persisted conversation on mount / when conversationId changes
   const convQuery = useQuery(
     trpc.chats.get.queryOptions({ chatId: conversationId })
   )
@@ -153,75 +131,23 @@ function ChatProviderClient({ children }: ChatProviderProps) {
   const persistedRepoId = convQuery.data?.repoId ?? null
   const conversationExists = !!convQuery.data
 
-  // Resolve the effective repoId we'll send: pinned wins over the live workspace.
   const effectiveRepoId = pinnedRepoId ?? persistedRepoId ?? repo?.id
 
-  const requestBodyRef = useRef({
-    repoId: effectiveRepoId,
-    conversationId,
-    currentPage: currentPath,
-    workflowId: workflowContext?.workflowId ?? undefined,
-  })
-  requestBodyRef.current = {
-    repoId: effectiveRepoId,
-    conversationId,
-    currentPage: currentPath,
-    workflowId: workflowContext?.workflowId ?? undefined,
-  }
-
-  // The AI SDK keeps the Chat instance stable, so keep transport stable too
-  // and read request metadata from a ref that updates on every render.
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport<UIMessage>({
-        api: "/api/chat",
-        body: () => requestBodyRef.current,
-      }),
-    []
-  )
-
-  // Create conversation + save when AI finishes.
   const createConv = useMutation(trpc.chats.create.mutationOptions())
-  const saveMessages = useMutation(trpc.chats.saveMessages.mutationOptions())
 
-  const {
-    messages,
-    sendMessage: sendChatMessage,
-    status,
-    addToolApprovalResponse,
-    setMessages,
-    error: chatHookError,
-  } = useChat<UIMessage>({
-    id: conversationId,
-    messages: persistedMessages,
-    transport,
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-    onError: (error) => {
-      if (error.message.includes("429")) {
-        setQuotaExhaustedByError(true)
-        refetchCustomer()
-        return
-      }
-      if (error.message.includes("Maximum update depth")) return
-      console.error("[chat]", error.message)
-      setChatError((prev) => (prev?.message === error.message ? prev : error))
+  const engine = useChatEngine({
+    chatId: conversationId,
+    repoId: effectiveRepoId,
+    initialMessages: persistedMessages,
+    extraRequestBody: {
+      workflowId: workflowContext?.workflowId ?? undefined,
     },
-    onFinish: ({ messages }) => {
-      if (messages.length === 0) return
-      saveMessages.mutate({
-        chatId: requestBodyRef.current.conversationId,
-        repoId: effectiveRepoId,
-        messages: messages as unknown as SerializedMessage[],
-        title: extractChatTitle(messages),
-      })
-      queryClient.invalidateQueries({ queryKey: trpc.chats.list.queryKey() })
-      refetchCustomer()
-
-      const mutatedIds = extractWorkflowIdsFromMessages(messages)
-      for (const wfId of mutatedIds) {
+    onFinishExtras: (messages) => {
+      const mutatedWorkflowIds = extractWorkflowIdsFromMessages(messages)
+      for (const wfId of mutatedWorkflowIds) {
         broadcastWorkflowMutation(wfId)
       }
-      if (mutatedIds.length > 0 && effectiveRepoId) {
+      if (mutatedWorkflowIds.length > 0 && effectiveRepoId) {
         queryClient.invalidateQueries({
           queryKey: trpc.workflows.list.queryKey({ repoId: effectiveRepoId }),
         })
@@ -238,12 +164,7 @@ function ChatProviderClient({ children }: ChatProviderProps) {
       }
     },
   })
-  const isLoading = status === "submitted" || status === "streaming"
 
-  // Combine hook error with our custom error state
-  const combinedError = chatError || chatHookError || null
-
-  // Persist isOpen state
   const updateIsOpen = useCallback((value: boolean) => {
     setIsOpen(value)
     setStoredValue(STORAGE_KEY_OPEN, String(value))
@@ -258,14 +179,12 @@ function ChatProviderClient({ children }: ChatProviderProps) {
 
   const sendMessage = useCallback(
     (content: string) => {
-      if (!content.trim() || isQuotaExhausted) return
-      setChatError(null)
+      if (!content.trim() || engine.isQuotaExhausted) return
 
-      const activeConvId = requestBodyRef.current.conversationId
-      if (!conversationExists && !createdConvIds.current.has(activeConvId)) {
-        createdConvIds.current.add(activeConvId)
+      if (!conversationExists && !createdConvIds.current.has(conversationId)) {
+        createdConvIds.current.add(conversationId)
         createConv.mutate(
-          { id: activeConvId, repoId: effectiveRepoId },
+          { id: conversationId, repoId: effectiveRepoId },
           {
             onSuccess: () => {
               queryClient.invalidateQueries({
@@ -276,48 +195,29 @@ function ChatProviderClient({ children }: ChatProviderProps) {
         )
       }
 
-      void sendChatMessage({ text: content })
-      setTimeout(() => refetchCustomer(), 2000)
+      engine.sendMessage(content)
+      setTimeout(() => engine.refetchCustomer(), 2000)
     },
     [
+      engine,
       conversationExists,
-      sendChatMessage,
-      isQuotaExhausted,
-      refetchCustomer,
       conversationId,
+      createConv,
       effectiveRepoId,
+      queryClient,
+      trpc.chats.list,
     ]
   )
 
   const respondToToolApproval = useCallback(
     (approvalId: string, approved: boolean) => {
-      addToolApprovalResponse({ id: approvalId, approved })
+      engine.addToolApprovalResponse({ id: approvalId, approved })
     },
-    [addToolApprovalResponse]
-  )
-
-  const clearChat = useCallback(() => {
-    setMessages([])
-    setChatError(null)
-  }, [setMessages])
-
-  const appendOptimisticMessage = useCallback(
-    (message: UIMessage) => {
-      setMessages((prev) => [...prev, message])
-    },
-    [setMessages]
-  )
-
-  const replaceOptimisticMessage = useCallback(
-    (id: string, message: UIMessage) => {
-      setMessages((prev) => prev.map((m) => (m.id === id ? message : m)))
-    },
-    [setMessages]
+    [engine]
   )
 
   const loadChat = useCallback(
     (chatId: string) => {
-      setChatError(null)
       setConversationId(chatId)
       setStoredValue(STORAGE_KEY_CONV, chatId)
       createdConvIds.current.add(chatId)
@@ -346,19 +246,17 @@ function ChatProviderClient({ children }: ChatProviderProps) {
     const id = crypto.randomUUID()
     setConversationId(id)
     setStoredValue(STORAGE_KEY_CONV, id)
-    setMessages([])
-    setChatError(null)
+    engine.setMessages([])
     setPinnedRepoId(null)
-    requestBodyRef.current = { ...requestBodyRef.current, conversationId: id }
     return id
-  }, [setMessages])
+  }, [engine])
 
   const value: ChatContextValue = {
-    messages,
-    isLoading,
+    messages: engine.messages,
+    isLoading: engine.isLoading,
     isOpen,
-    error: isQuotaExhausted ? null : combinedError,
-    isQuotaExhausted,
+    error: engine.error,
+    isQuotaExhausted: engine.isQuotaExhausted,
     conversationId,
     repoId: effectiveRepoId,
     workflowContext,
@@ -367,12 +265,12 @@ function ChatProviderClient({ children }: ChatProviderProps) {
     open,
     close,
     toggle,
-    clearChat,
+    clearChat: engine.clearChat,
     loadChat,
     newChat,
     setWorkflowContext,
-    appendOptimisticMessage,
-    replaceOptimisticMessage,
+    appendOptimisticMessage: engine.appendOptimisticMessage,
+    replaceOptimisticMessage: engine.replaceOptimisticMessage,
   }
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>

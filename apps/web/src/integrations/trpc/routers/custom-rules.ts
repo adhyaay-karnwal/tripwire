@@ -18,7 +18,7 @@ import {
   updateCustomRuleSchema,
   customRuleDefinitionSchema,
 } from "@tripwire/core"
-import { getUserPlanId } from "#/lib/plan"
+import { getUserPlanId } from "#/lib/billing"
 import type { GitHubUserGraphQL } from "@tripwire/github/user"
 
 import type { TRPCRouterRecord } from "@trpc/server"

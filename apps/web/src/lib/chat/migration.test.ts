@@ -2,9 +2,25 @@ import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import { createChatTools } from "@tripwire/tools/chat-adapter"
 import type { AnyToolDefinition } from "@tripwire/tools/registry"
-import { mergeClientMessagesWithStored, sanitizeMessages } from "./server"
+import {
+  mergeClientMessagesWithStored,
+  sanitizeMessages,
+  type ChatHistoryMessage,
+} from "./server"
 import { mergeMessagesPreservingResults } from "./persistence"
 import { parseActionResult } from "./format"
+
+type TestMessage = ChatHistoryMessage & {
+  id: string
+  role: string
+  parts: Array<Record<string, unknown>>
+}
+type ActionResultOutput = {
+  elements: { main: { type: string; props: Record<string, unknown> } }
+}
+type ToolWithExecute = {
+  execute: (input: unknown) => Promise<ActionResultOutput>
+}
 
 describe("AI SDK chat migration helpers", () => {
   it("wraps tool handler failures as ActionResult specs", async () => {
@@ -19,7 +35,7 @@ describe("AI SDK chat migration helpers", () => {
     }
 
     const tools = createChatTools({ userId: "u_1", repoId: "r_1" }, [tool])
-    const output = await (tools.fail_tool as any).execute({})
+    const output = await (tools.fail_tool as unknown as ToolWithExecute).execute({})
 
     expect(output.elements.main.type).toBe("ActionResult")
     expect(output.elements.main.props).toMatchObject({
@@ -69,7 +85,7 @@ describe("AI SDK chat migration helpers", () => {
       },
     ]
 
-    const [merged] = mergeClientMessagesWithStored(client, stored) as any[]
+    const [merged] = mergeClientMessagesWithStored(client, stored) as TestMessage[]
 
     expect(merged.parts).toHaveLength(1)
     expect(merged.parts[0]).toMatchObject({
@@ -101,7 +117,7 @@ describe("AI SDK chat migration helpers", () => {
       },
     ]
 
-    const merged = mergeClientMessagesWithStored(client, []) as any[]
+    const merged = mergeClientMessagesWithStored(client, []) as TestMessage[]
 
     expect(merged).toHaveLength(1)
     expect(merged[0].role).toBe("user")
@@ -144,7 +160,7 @@ describe("AI SDK chat migration helpers", () => {
     const [merged] = mergeMessagesPreservingResults(
       staleClient,
       stored
-    ) as any[]
+    ) as TestMessage[]
 
     expect(merged.parts).toHaveLength(1)
     expect(merged.parts[0].state).toBe("output-available")
@@ -167,7 +183,7 @@ describe("AI SDK chat migration helpers", () => {
       },
     ]
 
-    const merged = mergeMessagesPreservingResults(forgedClient, []) as any[]
+    const merged = mergeMessagesPreservingResults(forgedClient, []) as TestMessage[]
 
     expect(merged).toHaveLength(0)
   })
@@ -204,7 +220,7 @@ describe("AI SDK chat migration helpers", () => {
       },
     ]
 
-    const [merged] = mergeMessagesPreservingResults(client, stored) as any[]
+    const [merged] = mergeMessagesPreservingResults(client, stored) as TestMessage[]
 
     expect(merged.parts).toHaveLength(1)
     expect(merged.parts[0]).toMatchObject({
@@ -239,7 +255,7 @@ describe("AI SDK chat migration helpers", () => {
       },
     ]
 
-    const merged = mergeMessagesPreservingResults(forgedClient, []) as any[]
+    const merged = mergeMessagesPreservingResults(forgedClient, []) as TestMessage[]
 
     expect(merged).toHaveLength(1)
     expect(merged[0].role).toBe("user")
@@ -266,7 +282,7 @@ describe("AI SDK chat migration helpers", () => {
       },
     ]
 
-    const merged = mergeMessagesPreservingResults(client, stored) as any[]
+    const merged = mergeMessagesPreservingResults(client, stored) as TestMessage[]
 
     expect(merged).toHaveLength(2)
     expect(merged[0].parts[0].text).toBe("trusted response")
@@ -313,14 +329,14 @@ describe("AI SDK chat migration helpers", () => {
       },
     ]
 
-    const merged = mergeMessagesPreservingResults(staleClient, stored) as any[]
+    const merged = mergeMessagesPreservingResults(staleClient, stored) as TestMessage[]
     const mergedAssistant = merged.find(
       (message) => message.id === "assistant-1"
     )
 
     expect(mergedAssistant).toBeDefined()
-    expect(mergedAssistant.parts).toHaveLength(1)
-    expect(mergedAssistant.parts[0].state).toBe("output-available")
+    expect(mergedAssistant?.parts).toHaveLength(1)
+    expect(mergedAssistant?.parts[0].state).toBe("output-available")
   })
 
   it("keeps old TanStack tool result cards and new AI SDK tool result cards readable", () => {

@@ -1,3 +1,5 @@
+import type { ChatHistoryMessage } from "#/lib/chat/server"
+
 /**
  * Merge a client-side save into DB-owned chat history.
  *
@@ -6,9 +8,9 @@
  * able to create or rewrite assistant/tool history, especially approvals.
  */
 export function mergeMessagesPreservingResults(
-  input: unknown[],
-  existing: unknown[]
-): unknown[] {
+  input: ChatHistoryMessage[],
+  existing: ChatHistoryMessage[]
+): ChatHistoryMessage[] {
   if (existing.length === 0) {
     return input.filter(isUserMessage).map(clone)
   }
@@ -36,12 +38,12 @@ type MessageLike = {
   role?: string
 }
 
-function isUserMessage(message: unknown): boolean {
-  return (message as MessageLike | undefined)?.role === "user"
+function isUserMessage(message: ChatHistoryMessage): boolean {
+  return (message as MessageLike).role === "user"
 }
 
-function getMessageId(message: unknown): string | undefined {
-  const id = (message as MessageLike | undefined)?.id
+function getMessageId(message: ChatHistoryMessage): string | undefined {
+  const id = (message as MessageLike).id
   return typeof id === "string" ? id : undefined
 }
 

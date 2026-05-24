@@ -13,21 +13,7 @@ export const Menu: typeof MenuPrimitive.Root = MenuPrimitive.Root
 
 export const MenuPortal: typeof MenuPrimitive.Portal = MenuPrimitive.Portal
 
-export function MenuTrigger({
-  className,
-  children,
-  ...props
-}: MenuPrimitive.Trigger.Props): React.ReactElement {
-  return (
-    <MenuPrimitive.Trigger
-      className={className}
-      data-slot="menu-trigger"
-      {...props}
-    >
-      {children}
-    </MenuPrimitive.Trigger>
-  )
-}
+export const MenuTrigger: typeof MenuPrimitive.Trigger = MenuPrimitive.Trigger
 
 export function MenuPopup({
   children,
@@ -73,11 +59,7 @@ export function MenuPopup({
   )
 }
 
-export function MenuGroup(
-  props: MenuPrimitive.Group.Props
-): React.ReactElement {
-  return <MenuPrimitive.Group data-slot="menu-group" {...props} />
-}
+export const MenuGroup: typeof MenuPrimitive.Group = MenuPrimitive.Group
 
 export function MenuItem({
   className,
@@ -146,11 +128,8 @@ export function MenuCheckboxItem({
   )
 }
 
-export function MenuRadioGroup(
-  props: MenuPrimitive.RadioGroup.Props
-): React.ReactElement {
-  return <MenuPrimitive.RadioGroup data-slot="menu-radio-group" {...props} />
-}
+export const MenuRadioGroup: typeof MenuPrimitive.RadioGroup =
+  MenuPrimitive.RadioGroup
 
 export function MenuRadioItem({
   className,
@@ -223,11 +202,8 @@ export function MenuShortcut({
   )
 }
 
-export function MenuSub(
-  props: MenuPrimitive.SubmenuRoot.Props
-): React.ReactElement {
-  return <MenuPrimitive.SubmenuRoot data-slot="menu-sub" {...props} />
-}
+export const MenuSub: typeof MenuPrimitive.SubmenuRoot =
+  MenuPrimitive.SubmenuRoot
 
 export function MenuSubTrigger({
   className,

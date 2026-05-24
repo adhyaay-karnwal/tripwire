@@ -12,7 +12,7 @@ import { invalidateListCaches } from "#/lib/cache"
 import {
   isCustomRuleName,
   stripCustomRulePrefix,
-} from "#/lib/rules/custom-utils"
+} from "#/lib/custom-rules"
 import {
   EventPageExternalLinkIcon11,
   EventIssueDotCircleIcon12,

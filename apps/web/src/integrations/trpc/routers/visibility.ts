@@ -22,7 +22,7 @@ import {
   excludeRepoOwner,
   lowerInArray,
   whitelistJoinClause,
-} from "#/lib/visibility/queries"
+} from "#/lib/visibility-queries"
 import type { TRPCRouterRecord } from "@trpc/server"
 
 const sortColumnEnum = z.enum([

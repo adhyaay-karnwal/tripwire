@@ -1,18 +1,18 @@
-import { Button } from "@tripwire/ui/button"
-import { ContextUsageRingIcon } from "@tripwire/ui/icons/context-usage-ring-icon"
+import { Button } from "./button"
+import { ContextUsageRingIcon } from "./icons/context-usage-ring-icon"
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
-} from "@tripwire/ui/hover-card"
-import { Progress } from "@tripwire/ui/progress"
-import { cn } from "@tripwire/ui/utils"
+} from "./hover-card"
+import { Progress } from "./progress"
 import {
+  cn,
   formatPercent,
   formatCompact,
   formatUSD,
   safePercent,
-} from "#/lib/format"
+} from "./utils"
 import type { ComponentProps } from "react"
 import { createContext, useContext, useMemo } from "react"
 

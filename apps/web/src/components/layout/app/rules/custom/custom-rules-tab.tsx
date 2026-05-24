@@ -13,7 +13,7 @@ import {
 } from "@tripwire/ui/dialog"
 import { toastManager } from "@tripwire/ui/toast"
 import { toastFromError } from "#/lib/toast-error"
-import { getActionBadgeProps } from "#/lib/rules/custom-utils"
+import { getActionBadgeProps } from "#/lib/custom-rules"
 import { formatRelativeTime } from "#/lib/format"
 import type { CustomRuleAction } from "@tripwire/db"
 

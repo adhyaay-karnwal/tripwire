@@ -4,7 +4,7 @@ import { PlusStrokeIcon14 } from "@tripwire/ui/icons/app-chrome-icons"
 import { ChatThread } from "#/components/layout/app/chat/chat-thread"
 import { ChatComposer } from "#/components/layout/app/chat/chat-composer"
 import { useAIChat } from "#/providers/chat-context"
-import Dither from "@tripwire/ui/dither"
+import Dither from "#/components/shared/dither"
 
 interface AgentPanelProps {
   workflowId?: string

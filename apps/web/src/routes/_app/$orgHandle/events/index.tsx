@@ -10,7 +10,7 @@ import { routes } from "#/lib/routes"
 import {
   isCustomRuleName,
   stripCustomRulePrefix,
-} from "#/lib/rules/custom-utils"
+} from "#/lib/custom-rules"
 import { ChevronRightIndicatorIcon12 } from "@tripwire/ui/icons/app-chrome-icons"
 
 export const Route = createFileRoute("/_app/$orgHandle/events/")({

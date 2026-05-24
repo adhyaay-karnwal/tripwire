@@ -15,6 +15,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { trackCreditUsage } from "@tripwire/ai/credit-middleware"
 import { TITLE_SYSTEM_PROMPT } from "@tripwire/ai/prompt"
 import { parseCommand } from "#/lib/chat/commands"
+import { makeToolMessage, makeUserMessage } from "#/lib/chat/messages"
 import {
   filterToolsForSurface,
   runToolForChat,
@@ -25,37 +26,6 @@ type MessageLike = {
   id?: string
   role?: string
   parts?: Array<{ type?: string; text?: string; content?: string }>
-}
-
-function makeUserMessage(text: string) {
-  return {
-    id: crypto.randomUUID(),
-    role: "user",
-    parts: [{ type: "text", text }],
-  }
-}
-
-function makeToolMessage(opts: {
-  toolName: string
-  args: Record<string, unknown>
-  state: "output-available" | "output-error"
-  output?: unknown
-  errorText?: string
-}) {
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    parts: [
-      {
-        type: `tool-${opts.toolName}`,
-        toolCallId: crypto.randomUUID(),
-        state: opts.state,
-        input: opts.args,
-        ...(opts.output !== undefined ? { output: opts.output } : {}),
-        ...(opts.errorText ? { errorText: opts.errorText } : {}),
-      },
-    ],
-  }
 }
 
 function helpMessage() {

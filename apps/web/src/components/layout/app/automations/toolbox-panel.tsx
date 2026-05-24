@@ -15,7 +15,7 @@ import {
   TransformIcon,
 } from "@tripwire/ui/icons/node-icons"
 import { ToolboxSearchLoupeIcon13 } from "@tripwire/ui/icons/app-chrome-icons"
-import Dither from "@tripwire/ui/dither"
+import Dither from "#/components/shared/dither"
 import type { ReactNode } from "react"
 
 interface PaletteItem {
