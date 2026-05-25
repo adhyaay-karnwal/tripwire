@@ -2,7 +2,7 @@ import { db } from "@tripwire/db/client"
 import { organizations, repositories, account, member } from "@tripwire/db"
 import { eq, and } from "drizzle-orm"
 
-interface InstallationPayload {
+export interface InstallationPayload {
   action: string
   installation: {
     id: number
@@ -22,7 +22,7 @@ interface InstallationPayload {
   sender: { id: number; login: string }
 }
 
-interface InstallationReposPayload {
+export interface InstallationReposPayload {
   action: "added" | "removed"
   installation: { id: number }
   repositories_added?: Array<{

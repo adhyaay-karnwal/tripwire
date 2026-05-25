@@ -17,6 +17,8 @@ import { eq } from "drizzle-orm"
 import {
   handleInstallation,
   handleInstallationRepositories,
+  type InstallationPayload,
+  type InstallationReposPayload,
 } from "#/lib/github/webhook"
 import { markGitHubRevalidationSignals } from "@tripwire/github/cache"
 import {
@@ -33,6 +35,77 @@ type WebhookCtx = {
   githubRepoId: number
   senderLogin: string
   senderId: number
+}
+
+/**
+ * Structural shape for any GitHub webhook delivery the route reads. All
+ * fields are optional because we don't trust the parsed body until we've
+ * narrowed it — the install / install-repos handlers each have their own
+ * stricter input types and the type guards below upgrade the wide shape
+ * to those at the boundary.
+ */
+type WebhookRepo = { id: number; full_name: string }
+
+type GitHubWebhookPayload = {
+  action?: string
+  sender?: { login?: string; id?: number; type?: string }
+  installation?: {
+    id?: number
+    account?: {
+      id?: number
+      login?: string
+      type?: string
+      avatar_url?: string
+    }
+  }
+  repository?: WebhookRepo
+  repositories?: Array<{
+    id: number
+    name: string
+    full_name: string
+    private: boolean
+  }>
+  repositories_added?: Array<{
+    id: number
+    name: string
+    full_name: string
+    private: boolean
+  }>
+  repositories_removed?: Array<{ id: number }>
+  pull_request?: {
+    number: number
+    title?: string | null
+    body?: string | null
+  }
+  issue?: { number: number; title?: string | null; body?: string | null }
+  comment?: { id: number; body?: string | null }
+}
+
+function isInstallationPayload(
+  p: GitHubWebhookPayload
+): p is GitHubWebhookPayload & InstallationPayload {
+  const inst = p.installation
+  const sender = p.sender
+  const account = inst?.account
+  return (
+    typeof p.action === "string" &&
+    typeof inst?.id === "number" &&
+    typeof account?.id === "number" &&
+    typeof account.login === "string" &&
+    typeof account.type === "string" &&
+    typeof account.avatar_url === "string" &&
+    typeof sender?.id === "number" &&
+    typeof sender.login === "string"
+  )
+}
+
+function isInstallationReposPayload(
+  p: GitHubWebhookPayload
+): p is GitHubWebhookPayload & InstallationReposPayload {
+  return (
+    (p.action === "added" || p.action === "removed") &&
+    typeof p.installation?.id === "number"
+  )
 }
 
 /**
@@ -80,7 +153,7 @@ async function handler({ request }: { request: Request }) {
 
   const event = request.headers.get("x-github-event")
   const deliveryId = request.headers.get("x-github-delivery")
-  const payload = JSON.parse(body)
+  const payload = JSON.parse(body) as GitHubWebhookPayload
   console.log("[Webhook] Event:", event, "| Action:", payload.action)
 
   // Idempotency: GitHub retries reuse the same X-GitHub-Delivery UUID.
@@ -133,9 +206,17 @@ async function handler({ request }: { request: Request }) {
 
   try {
     if (event === "installation") {
-      await handleInstallation(payload)
+      if (isInstallationPayload(payload)) {
+        await handleInstallation(payload)
+      } else {
+        console.warn("[Webhook] installation payload missing required fields")
+      }
     } else if (event === "installation_repositories") {
-      await handleInstallationRepositories(payload)
+      if (isInstallationReposPayload(payload)) {
+        await handleInstallationRepositories(payload)
+      } else {
+        console.warn("[Webhook] installation_repositories payload invalid")
+      }
     } else if (payload.repository) {
       const repo = payload.repository
       const ctx: WebhookCtx = {
@@ -158,11 +239,9 @@ async function handler({ request }: { request: Request }) {
 
 async function handleRepoEvent(
   event: string | null,
-  // biome-ignore lint/suspicious/noExplicitAny: webhook payload is dynamically shaped
-  payload: any,
+  payload: GitHubWebhookPayload,
   ctx: WebhookCtx,
-  // biome-ignore lint/suspicious/noExplicitAny: webhook payload is dynamically shaped
-  repo: any
+  repo: WebhookRepo
 ): Promise<void> {
   switch (event) {
     case "pull_request": {
