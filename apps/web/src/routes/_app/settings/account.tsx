@@ -16,11 +16,21 @@ import {
   DialogPanel,
   DialogFooter,
   DialogClose,
-} from "#/components/ui/dialog"
-import { SessionMonitorIcon16 } from "#/components/icons/app-chrome-icons"
+} from "@tripwire/ui/dialog"
+import { SessionMonitorIcon16 } from "@tripwire/ui/icons/app-chrome-icons"
+import { buildSeo, formatPageTitle, PRIVATE_ROUTE_HEADERS } from "#/lib/seo"
 
 export const Route = createFileRoute("/_app/settings/account")({
   component: AccountSettingsPage,
+  headers: () => PRIVATE_ROUTE_HEADERS,
+  head: ({ match }) =>
+    buildSeo({
+      path: match.pathname,
+      title: formatPageTitle("Account"),
+      description:
+        "Manage your Tripwire profile, connected providers, active sessions, and account deletion.",
+      robots: "noindex",
+    }),
 })
 
 function AccountSettingsPage() {

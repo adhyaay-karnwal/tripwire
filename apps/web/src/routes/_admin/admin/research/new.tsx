@@ -4,9 +4,17 @@ import { useMutation } from "@tanstack/react-query"
 import { Button } from "@tripwire/ui/button"
 import { useTRPC } from "#/integrations/trpc/react"
 import { toastFromError } from "#/lib/toast-error"
+import { buildSeo, formatPageTitle } from "#/lib/seo"
 
 export const Route = createFileRoute("/_admin/admin/research/new")({
   component: NewResearchRunPage,
+  head: ({ match }) =>
+    buildSeo({
+      path: match.pathname,
+      title: formatPageTitle("New research run"),
+      description: "Configure a new batch contributor research run.",
+      robots: "noindex",
+    }),
 })
 
 interface FieldProps {
@@ -135,7 +143,7 @@ function NewResearchRunPage() {
               max={500}
               value={prLimit}
               onChange={(e) => setPrLimit(Number(e.target.value))}
-              className="w-full rounded-lg border border-tw-border bg-tw-surface p-2.5 text-[13px] tabular-nums text-tw-text-primary transition-colors outline-none focus:border-tw-accent"
+              className="w-full rounded-lg border border-tw-border bg-tw-surface p-2.5 text-[13px] text-tw-text-primary tabular-nums transition-colors outline-none focus:border-tw-accent"
             />
           </Field>
         </div>
@@ -145,8 +153,8 @@ function NewResearchRunPage() {
           hint={
             <>
               If set, evaluates each contributor against this repo's
-              whitelist/blacklist/event history. Must be a repo the Tripwire
-              GH App is installed on. Leave blank to evaluate globally.
+              whitelist/blacklist/event history. Must be a repo the Tripwire GH
+              App is installed on. Leave blank to evaluate globally.
             </>
           }
         >

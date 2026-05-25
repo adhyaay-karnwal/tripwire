@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useEffect, useState, useCallback } from "react"
-import { buildSeoMeta, canonicalLink } from "#/lib/seo"
+import { buildSeo } from "#/lib/seo"
 import { authClient } from "@tripwire/auth/client"
-import { LandingHeader } from "#/components/landing/header"
-import { useSpaceInvaders } from "#/components/landing/space-invaders"
-import FaultyTerminal from "#/components/landing/faulty-terminal"
+import { LandingHeader } from "#/components/layout/landing/header"
+import { useSpaceInvaders } from "#/components/layout/landing/space-invaders"
+import FaultyTerminal from "#/components/layout/landing/faulty-terminal"
 import {
   TRIPWIRE_EYE_OUTER_PATH,
   TRIPWIRE_EYE_OUTER_VIEWBOX,
@@ -14,7 +14,7 @@ import {
   TRIPWIRE_EYE_PUPIL_PATH,
   TRIPWIRE_EYE_PUPIL_VIEWBOX,
   TRIPWIRE_EYE_PUPIL_RECT_IN_OUTER,
-} from "#/components/icons/tripwire-eye"
+} from "@tripwire/ui/icons/tripwire-eye"
 
 const EYE_CURSOR_MASK = {
   viewBox: TRIPWIRE_EYE_OUTER_VIEWBOX,
@@ -48,16 +48,14 @@ const EYE_CURSOR_MASK = {
 
 export const Route = createFileRoute("/")({
   component: LandingPage,
-  head: () => ({
-    meta: buildSeoMeta({
-      title: "Tripwire",
-      rawTitle: true,
+  head: ({ match }) =>
+    buildSeo({
+      path: match.pathname,
+      title: "Tripwire — catch slop before it catches up with you",
       description:
-        "Catch slop before it catches up with you. Open source GitHub moderation for spam PRs, bot accounts, and AI-generated contributions.",
-      path: "/",
+        "Open source GitHub moderation for spam PRs, bot accounts, and AI-generated contributions. Rules that run on every webhook so maintainers don't have to.",
+      type: "website",
     }),
-    links: [canonicalLink("/")],
-  }),
 })
 
 function LandingPage() {

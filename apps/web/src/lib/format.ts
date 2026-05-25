@@ -16,28 +16,12 @@ export function createLabelProxy(
   })
 }
 
-export function formatPercent(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 1,
-    style: "percent",
-  }).format(value)
-}
-
-export function formatCompact(value: number): string {
-  return new Intl.NumberFormat("en-US", { notation: "compact" }).format(value)
-}
-
-export function formatUSD(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    style: "currency",
-  }).format(value)
-}
-
-export function safePercent(used: number, max: number): number {
-  if (max <= 0) return 0
-  return Math.max(0, Math.min(used / max, 1))
-}
+export {
+  formatPercent,
+  formatCompact,
+  formatUSD,
+  safePercent,
+} from "@tripwire/ui/utils"
 
 export function formatRelativeTime(
   date: Date | string | null | undefined
@@ -52,6 +36,7 @@ export function formatRelativeTime(
   const diffHr = Math.floor(diffMin / 60)
   if (diffHr < 24) return `${diffHr}h ago`
   const diffDay = Math.floor(diffHr / 24)
+  if (diffDay === 1) return "yesterday"
   if (diffDay < 7) return `${diffDay}d ago`
   const diffWk = Math.floor(diffDay / 7)
   if (diffWk < 5) return `${diffWk}w ago`

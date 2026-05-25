@@ -3,11 +3,21 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { parseAsString, useQueryStates } from "nuqs"
 import { authClient } from "@tripwire/auth/client"
 import { Button } from "@tripwire/ui/button"
-import { TripwireSparkIcon } from "#/components/icons/nav-icons"
-import { OauthConsentCheckRingIcon20 } from "#/components/icons/oauth-consent-check-ring-icon"
+import { TripwireSparkIcon } from "@tripwire/ui/icons/nav-icons"
+import { OauthConsentCheckRingIcon20 } from "@tripwire/ui/icons/oauth-consent-check-ring-icon"
+import { buildSeo, formatPageTitle, PRIVATE_ROUTE_HEADERS } from "#/lib/seo"
 
 export const Route = createFileRoute("/oauth/consent")({
   component: ConsentPage,
+  headers: () => PRIVATE_ROUTE_HEADERS,
+  head: ({ match }) =>
+    buildSeo({
+      path: match.pathname,
+      title: formatPageTitle("Authorize app"),
+      description:
+        "Authorize a third-party application to access your Tripwire account.",
+      robots: "noindex",
+    }),
 })
 
 function ConsentPage() {

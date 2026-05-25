@@ -2,24 +2,45 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { Button } from "@tripwire/ui/button"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState, useRef, useEffect } from "react"
-import { ChatComposer } from "#/components/chat/chat-composer"
-import { ChatThread } from "#/components/chat/chat-thread"
-import { usePersistedChat } from "#/components/chat/use-persisted-chat"
-import { useWorkspace, useWorkspacePath } from "#/lib/workspace-context"
+import { ChatComposer } from "#/components/layout/app/chat/chat-composer"
+import { ChatThread } from "#/components/layout/app/chat/chat-thread"
+import { usePersistedChat } from "#/hooks/use-persisted-chat"
+import { useWorkspace, useWorkspacePath } from "#/providers/workspace-context"
 import { useTRPC } from "#/integrations/trpc/react"
-import { parseCommand } from "#/lib/chat-commands"
-import { useSlashCommandRunner } from "#/lib/use-chat-command-runner"
-import { CommandConfirmation } from "#/components/chat/command-confirmation"
-import { ChevronLeftStrokeIcon14 } from "#/components/icons/app-chrome-icons"
-import { uiMessagesFromStored } from "#/lib/conversation-stored"
+import { parseCommand } from "#/lib/chat/commands"
+import { useSlashCommandRunner } from "#/lib/chat/use-command-runner"
+import { CommandConfirmation } from "#/components/layout/app/chat/command-confirmation"
+import { ChevronLeftStrokeIcon14 } from "@tripwire/ui/icons/app-chrome-icons"
+import { uiMessagesFromStored } from "#/lib/chat/conversation-stored"
 import { Provider as ChatStoreProvider } from "@ai-sdk-tools/store"
+import { buildSeo, formatPageTitle, PRIVATE_ROUTE_HEADERS } from "#/lib/seo"
 
-export const Route = createFileRoute("/_app/chat/$chatId")({
-  component: () => (
+function ChatRoute() {
+  return (
     <ChatStoreProvider>
       <ChatPage />
     </ChatStoreProvider>
-  ),
+  )
+}
+
+export const Route = createFileRoute("/_app/chat/$chatId")({
+  // Prefetch the chat's conversation thread so the page renders against
+  // a warm cache when the user navigates in from anywhere.
+  loader: ({ context, params }) => {
+    void context.queryClient.prefetchQuery(
+      context.trpc.chats.get.queryOptions({ chatId: params.chatId })
+    )
+  },
+  component: ChatRoute,
+  headers: () => PRIVATE_ROUTE_HEADERS,
+  head: ({ match }) =>
+    buildSeo({
+      path: match.pathname,
+      title: formatPageTitle("Chat"),
+      description:
+        "Ask Tripwire about contributors, rules, events, and your repo's protection posture.",
+      robots: "noindex",
+    }),
 })
 
 function ChatPage() {

@@ -1,19 +1,53 @@
 /**
- * GitHub Data Factory — enriched data fetching with DB caching.
+ * GitHub Data Factory — enriched data fetching with cache-engine backing.
  *
  * Unlike the count-only functions in user.ts, this module returns full
- * GitHub objects (PR details, repo info, activity) and caches them in
- * PostgreSQL for instant repeat lookups.
+ * GitHub objects (PR details, repo info, activity). All caching goes
+ * through the shared read-through engine in ./cache so we get conditional
+ * refresh, request-scoped dedup, stale-if-rate-limited, adaptive freshness,
+ * and webhook-driven invalidation for free.
  *
  * Consumers: AI chat tools, TRPC routers, workflow simulation, future integrations.
  */
 
-import { githubApi } from "./app"
-import { fetchUserGraphQL, fetchUserContributions } from "./user"
-import type { GitHubUserGraphQL, PinnedRepo, ContributionsData } from "./user"
 import type { CachedPR, CachedRepo } from "@tripwire/db"
-const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
+import { githubApi } from "./app"
+import {
+  createGitHubResponseMetadata,
+  type GetOrRevalidateGitHubResourceOptions,
+  type GitHubFetchResult,
+  getGitHubResourceLocalFirst,
+  getOrRevalidateGitHubResource,
+  peekGitHubCache,
+} from "./cache"
+import { cachedFetchGitHub } from "./request"
+
+/**
+ * Cache-engine entry shared by every fetcher in this file.
+ *
+ * - `forceRefresh = false` (default): serve stale-while-revalidate. The
+ *   user sees the cached payload immediately and a background refresh
+ *   reconciles to fresh in the next tick.
+ * - `forceRefresh = true`: bypass freshness entirely (`freshForMs: 0`)
+ *   so the caller actually waits on a fresh fetch. Used when a user
+ *   action explicitly demands canonical data.
+ */
+async function cacheOrRefresh<TData>(
+  options: GetOrRevalidateGitHubResourceOptions<TData>,
+  forceRefresh: boolean | undefined
+): Promise<TData> {
+  if (forceRefresh) {
+    return getOrRevalidateGitHubResource<TData>({ ...options, freshForMs: 0 })
+  }
+  const result = await getGitHubResourceLocalFirst<TData>(options)
+  return result.data
+}
+import type { ContributionsData, GitHubUserGraphQL, PinnedRepo } from "./user"
+import { fetchUserContributions, fetchUserGraphQL } from "./user"
+
+const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour — matches pre-refactor behavior
 const MIN_BATCH_SIZE = 20 // always fetch at least this many for cache warmth
+
 export type { CachedPR as GitHubPR, CachedRepo as GitHubRepoDetail }
 
 export interface FetchOptions {
@@ -37,90 +71,30 @@ export interface ActivityResult {
   pinned: PinnedRepo[]
   graphql: GitHubUserGraphQL | null
 }
-async function getDbDeps() {
-  const { eq, sql } = await import("drizzle-orm")
-  const { db } = await import("@tripwire/db/client")
-  const { githubUserCache } = await import("@tripwire/db")
-  return { eq, sql, db, githubUserCache }
+
+/**
+ * Cached PR bundle. Keyed only by the requesting username — `limit` is
+ * not part of the cache key so any caller asking for ≤MIN_BATCH_SIZE
+ * items hits the same row (matches the pre-refactor optimization).
+ */
+type MergedPrsCachePayload = {
+  items: CachedPR[]
+  totalCount: number
 }
 
-async function getCached(username: string) {
-  try {
-    const { sql, db, githubUserCache } = await getDbDeps()
-    const [row] = await db
-      .select()
-      .from(githubUserCache)
-      .where(
-        sql`lower(${githubUserCache.githubUsername}) = ${username.toLowerCase()}`
-      )
-      .limit(1)
-    if (!row) return null
-    if (row.expiresAt < new Date()) return null // expired
-    return row
-  } catch {
-    return null // cache read failure — fall through to API
-  }
+/**
+ * Bundled profile + repos under one cache slot. The profile is fetched
+ * as a side-effect of `fetchUserRepos` to get the authoritative
+ * `public_repos` count (the repos REST endpoint doesn't return totals).
+ * Bundling lets us preserve that single-trip pattern.
+ */
+type UserReposCachePayload = {
+  items: CachedRepo[]
+  totalCount: number
+  profile: Record<string, unknown> | null
+  githubUserId: number | null
 }
 
-async function upsertCache(
-  username: string,
-  data: {
-    githubUserId?: number
-    profileJson?: Record<string, unknown>
-    mergedPrsJson?: CachedPR[]
-    mergedPrCount?: number
-    reposJson?: CachedRepo[]
-    repoCount?: number
-    graphqlJson?: Record<string, unknown> | null
-  }
-) {
-  const now = new Date()
-  const expiresAt = new Date(now.getTime() + CACHE_TTL_MS)
-  const normalizedUsername = username.toLowerCase()
-  const updateSet = {
-    ...(data.githubUserId !== undefined && { githubUserId: data.githubUserId }),
-    ...(data.profileJson !== undefined && { profileJson: data.profileJson }),
-    ...(data.mergedPrsJson !== undefined && {
-      mergedPrsJson: data.mergedPrsJson,
-    }),
-    ...(data.mergedPrCount !== undefined && {
-      mergedPrCount: data.mergedPrCount,
-    }),
-    ...(data.reposJson !== undefined && { reposJson: data.reposJson }),
-    ...(data.repoCount !== undefined && { repoCount: data.repoCount }),
-    ...(data.graphqlJson !== undefined && { graphqlJson: data.graphqlJson }),
-    fetchedAt: now,
-    expiresAt,
-    updatedAt: now,
-  }
-  try {
-    const { sql, db, githubUserCache } = await getDbDeps()
-    await db
-      .insert(githubUserCache)
-      .values({
-        githubUsername: normalizedUsername,
-        githubUserId: data.githubUserId ?? null,
-        profileJson: data.profileJson ?? {},
-        mergedPrsJson: data.mergedPrsJson ?? [],
-        mergedPrCount: data.mergedPrCount ?? 0,
-        reposJson: data.reposJson ?? [],
-        repoCount: data.repoCount ?? 0,
-        graphqlJson: data.graphqlJson ?? null,
-        fetchedAt: now,
-        expiresAt,
-      })
-      .onConflictDoNothing()
-
-    await db
-      .update(githubUserCache)
-      .set(updateSet)
-      .where(
-        sql`lower(${githubUserCache.githubUsername}) = ${normalizedUsername}`
-      )
-  } catch {
-    // Cache write failure — non-fatal
-  }
-}
 function transformSearchItemToPR(item: Record<string, unknown>): CachedPR {
   const repoUrl = (item.repository_url as string) ?? ""
   const repoFullName = repoUrl.replace("https://api.github.com/repos/", "")
@@ -152,7 +126,6 @@ function transformSearchItemToPR(item: Record<string, unknown>): CachedPR {
     })),
     authorLogin: (user.login as string) ?? "",
     authorAvatar: (user.avatar_url as string) ?? "",
-    // These get enriched by fetchPRDetails — default to 0
     additions: 0,
     deletions: 0,
     changedFiles: 0,
@@ -179,7 +152,6 @@ async function enrichPRWithDetails(
       token
     )
     if (!detail) return pr
-    // merged_by is set when PR is merged; closed_by when closed without merge
     const mergedByUser = (detail.merged_by as Record<string, unknown>) ?? null
     const closedByUser = (detail.closed_by as Record<string, unknown>) ?? null
     const authorLogin =
@@ -232,9 +204,52 @@ function transformRepoItem(item: Record<string, unknown>): CachedRepo {
     archived: (item.archived as boolean) ?? false,
   }
 }
+
+function syntheticMetadata() {
+  // No raw response headers (yet — the next phase will switch these calls
+  // through fetchGitHubResponse so we get ETag + rate-limit headers).
+  return createGitHubResponseMetadata(200, {})
+}
+
 /**
- * Fetch a user's pull requests with full details.
- * Defaults to 5 merged PRs. Cached for 1 hour.
+ * Build the `/search/issues` endpoint for "this user's PRs in state X".
+ * Shared between the cached and uncached paths so any change to the
+ * query or perPage logic only happens once.
+ */
+function buildUserPRsSearchEndpoint(
+  username: string,
+  state: FetchOptions["state"] | "merged",
+  limit: number
+): string {
+  const stateFilter = state === "all" ? "" : `+is:${state}`
+  const perPage = Math.max(limit, MIN_BATCH_SIZE)
+  return `/search/issues?q=author:${encodeURIComponent(username)}+type:pr${stateFilter}&sort=created&order=desc&per_page=${perPage}`
+}
+
+/**
+ * Run the search → transform → enrich-top-N pipeline against a raw
+ * search response. Pure of caching concerns — both fetchUserPRs paths
+ * lean on this so the enrichment + transform logic exists once.
+ */
+async function buildPRsPayload(
+  token: string,
+  rawData: { total_count?: number; items?: Record<string, unknown>[] } | null,
+  limit: number
+): Promise<MergedPrsCachePayload> {
+  const totalCount = (rawData?.total_count as number) ?? 0
+  const rawItems = (rawData?.items as Record<string, unknown>[]) ?? []
+  const basePrs = rawItems.map(transformSearchItemToPR)
+  const enriched = await Promise.all(
+    basePrs.slice(0, limit).map((pr) => enrichPRWithDetails(token, pr))
+  )
+  return { items: [...enriched, ...basePrs.slice(limit)], totalCount }
+}
+
+/**
+ * Fetch a user's pull requests with full details. Defaults to 5
+ * merged PRs. The merged-state path goes through the read-through
+ * cache (1h TTL + signal-driven invalidation); other states fall
+ * through to a direct call.
  */
 export async function fetchUserPRs(
   token: string,
@@ -244,55 +259,242 @@ export async function fetchUserPRs(
   const limit = opts.limit ?? 5
   const state = opts.state ?? "merged"
 
-  // Check cache (only for merged state — the default/common case)
-  if (!opts.forceRefresh && state === "merged") {
-    const cached = await getCached(username)
-    if (cached && cached.mergedPrsJson.length > 0) {
+  if (state !== "merged") {
+    // Non-merged states are rarer + change more often — skip the cache.
+    let searchResult: Record<string, unknown> | null = null
+    try {
+      searchResult = await githubApi(
+        buildUserPRsSearchEndpoint(username, state, limit),
+        token
+      )
+    } catch {
+      // 422 = user has no searchable PR activity; other errors = API issue.
+      return { items: [], totalCount: 0 }
+    }
+    return buildPRsPayload(token, searchResult, limit)
+  }
+
+  const fetcher = async (conditionals: {
+    etag?: string | null
+    lastModified?: string | null
+  }): Promise<GitHubFetchResult<MergedPrsCachePayload>> => {
+    let result: GitHubFetchResult<{
+      total_count?: number
+      items?: Record<string, unknown>[]
+    }>
+    try {
+      result = await cachedFetchGitHub(
+        buildUserPRsSearchEndpoint(username, "merged", limit),
+        conditionals,
+        { token }
+      )
+    } catch {
+      // Cache the empty result briefly so we don't hammer search on 422.
       return {
-        items: (cached.mergedPrsJson as CachedPR[]).slice(0, limit),
-        totalCount: cached.mergedPrCount,
+        kind: "success",
+        data: { items: [], totalCount: 0 },
+        metadata: syntheticMetadata(),
       }
+    }
+
+    if (result.kind === "not-modified") {
+      // Engine refreshes freshness without re-running enrichment.
+      return result
+    }
+
+    return {
+      kind: "success",
+      data: await buildPRsPayload(token, result.data, limit),
+      metadata: result.metadata,
     }
   }
 
-  // Fetch from GitHub Search API
-  const stateFilter = state === "all" ? "" : `+is:${state}`
-  const perPage = Math.max(limit, MIN_BATCH_SIZE)
-  let searchResult: Record<string, unknown> | null = null
-  try {
-    searchResult = await githubApi(
-      `/search/issues?q=author:${encodeURIComponent(username)}+type:pr${stateFilter}&sort=created&order=desc&per_page=${perPage}`,
-      token
-    )
-  } catch {
-    // 422 = user has no searchable PR activity, other errors = API issue
-    return { items: [], totalCount: 0 }
-  }
-
-  const totalCount = (searchResult?.total_count as number) ?? 0
-  const rawItems = (searchResult?.items as Record<string, unknown>[]) ?? []
-  const basePrs = rawItems.map(transformSearchItemToPR)
-
-  // Enrich the ones we'll return with full PR details (additions/deletions/commits)
-  const toEnrich = basePrs.slice(0, limit)
-  const enriched = await Promise.all(
-    toEnrich.map((pr) => enrichPRWithDetails(token, pr))
+  const cached = await cacheOrRefresh<MergedPrsCachePayload>(
+    {
+      scope: username.toLowerCase(),
+      resource: "user.merged-prs",
+      freshForMs: CACHE_TTL_MS,
+      fetcher,
+    },
+    opts.forceRefresh
   )
-  const prs = [...enriched, ...basePrs.slice(limit)]
 
-  // Cache merged PRs
-  if (state === "merged") {
-    await upsertCache(username, {
-      mergedPrsJson: prs,
-      mergedPrCount: totalCount,
-    })
+  return {
+    items: cached.items.slice(0, limit),
+    totalCount: cached.totalCount,
   }
-
-  return { items: enriched, totalCount }
 }
+
+/**
+ * Fetch a user's repositories with stars, language, and descriptions.
+ * Defaults to 5 top repos by stars. Cached for 1 hour. Profile is
+ * bundled into the same cache slot since it's fetched together to
+ * resolve the authoritative `public_repos` count.
+ */
+export async function fetchUserRepos(
+  token: string,
+  username: string,
+  opts: FetchOptions = {}
+): Promise<RepoResult> {
+  const limit = opts.limit ?? 5
+  const scope = username.toLowerCase()
+
+  const fetcher = async (conditionals: {
+    etag?: string | null
+    lastModified?: string | null
+  }): Promise<GitHubFetchResult<UserReposCachePayload>> => {
+    const perPage = Math.max(limit, MIN_BATCH_SIZE)
+    const reposEndpoint = `/users/${encodeURIComponent(username)}/repos?per_page=${perPage}&sort=stargazers&direction=desc`
+
+    const reposResult = await cachedFetchGitHub<Record<string, unknown>[]>(
+      reposEndpoint,
+      conditionals,
+      { token }
+    )
+
+    if (reposResult.kind === "not-modified") {
+      // Repos list unchanged → existing bundled profile/id are still valid.
+      return reposResult
+    }
+
+    const rawItems = reposResult.data ?? []
+    const items = rawItems.map(transformRepoItem)
+    let totalCount = items.length
+    let profile: Record<string, unknown> | null = null
+    let githubUserId: number | null = null
+
+    try {
+      // Profile is supplementary — no conditional refresh (rate-limit
+      // headers come from the repos call, which is what feeds adaptive freshness).
+      profile = await githubApi(`/users/${encodeURIComponent(username)}`, token)
+      if (profile?.public_repos) {
+        totalCount = profile.public_repos as number
+      }
+      if (typeof profile?.id === "number") {
+        githubUserId = profile.id
+      }
+    } catch {
+      // Profile fetch is best-effort — keep raw repo count.
+    }
+
+    return {
+      kind: "success",
+      data: { items, totalCount, profile, githubUserId },
+      metadata: reposResult.metadata,
+    }
+  }
+  const cached = await cacheOrRefresh<UserReposCachePayload>(
+    {
+      scope,
+      resource: "user.repos",
+      freshForMs: CACHE_TTL_MS,
+      fetcher,
+    },
+    opts.forceRefresh
+  )
+
+  return {
+    items: cached.items.slice(0, limit),
+    totalCount: cached.totalCount,
+  }
+}
+
+/**
+ * Fetch a user's contribution activity: calendar, pinned repos, enriched profile.
+ * The graphql blob (orgs/sponsors/badges) is cached for 1 hour; the
+ * contributions calendar and pinned repos are always fetched fresh
+ * since they change daily.
+ */
+export async function fetchUserActivity(
+  token: string,
+  username: string,
+  opts: Pick<FetchOptions, "forceRefresh"> = {}
+): Promise<ActivityResult> {
+  const scope = username.toLowerCase()
+
+  const graphqlFetcher = async () => {
+    const data = await fetchUserGraphQL(token, username).catch(() => null)
+    return { kind: "success" as const, data, metadata: syntheticMetadata() }
+  }
+  const [graphql, contribs] = await Promise.all([
+    cacheOrRefresh<GitHubUserGraphQL | null>(
+      {
+        scope,
+        resource: "user.activity.graphql",
+        freshForMs: CACHE_TTL_MS,
+        fetcher: graphqlFetcher,
+      },
+      opts.forceRefresh
+    ),
+    fetchUserContributions(token, username).catch(() => null),
+  ])
+
+  return {
+    contributions: contribs?.contributions ?? null,
+    pinned: contribs?.pinned ?? [],
+    graphql,
+  }
+}
+
+/**
+ * Opportunistic read of a user's cached profile (if anyone has fetched
+ * their repos before). Returns null on cache miss — does NOT trigger a
+ * GitHub fetch. Used by the custom-rules simulator to render previews
+ * for usernames seen in the event log.
+ */
+export async function peekCachedUserProfile(username: string): Promise<{
+  profile: Record<string, unknown> | null
+  githubUserId: number | null
+} | null> {
+  const cached = await peekGitHubCache<UserReposCachePayload>(
+    username.toLowerCase(),
+    "user.repos"
+  )
+  if (!cached) return null
+  return { profile: cached.profile, githubUserId: cached.githubUserId }
+}
+
+/**
+ * Opportunistic read of a user's cached graphql enrichment. Returns null
+ * on cache miss — does NOT trigger a GitHub fetch.
+ */
+export async function peekCachedUserGraphql(
+  username: string
+): Promise<GitHubUserGraphQL | null> {
+  return peekGitHubCache<GitHubUserGraphQL>(
+    username.toLowerCase(),
+    "user.activity.graphql"
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Comment + PR detail helpers (no caching — these are per-comment-thread
+// reads triggered only by deep-dive UI / AI tool calls).
+// ---------------------------------------------------------------------------
+
+export interface PRComment {
+  id: number
+  author: string
+  authorAvatar: string
+  body: string
+  createdAt: string
+  type: "comment" | "review"
+}
+
 export interface CommentThreadResult {
   comments: PRComment[]
   totalCount: number
+}
+
+/**
+ * Bot detection — uses the GitHub user `type` field (authoritative) plus
+ * a pattern fallback for older accounts that don't set type correctly.
+ */
+const BOT_LOGIN_PATTERNS = [/\[bot\]$/i, /bot$/i, /-bot$/i, /^github-actions/i]
+
+function isBot(login: string, userType?: string): boolean {
+  if (userType === "Bot") return true
+  return BOT_LOGIN_PATTERNS.some((p) => p.test(login))
 }
 
 /**
@@ -308,7 +510,6 @@ export async function fetchComments(
 ): Promise<CommentThreadResult> {
   const limit = opts.limit ?? 50
 
-  // Issue comments (conversation) + PR review comments in parallel
   const [issueComments, reviewComments] = await Promise.all([
     githubApi(
       `/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`,
@@ -370,14 +571,6 @@ export async function fetchComments(
 
   return { comments: sorted.slice(0, limit), totalCount: sorted.length }
 }
-export interface PRComment {
-  id: number
-  author: string
-  authorAvatar: string
-  body: string
-  createdAt: string
-  type: "comment" | "review"
-}
 
 export interface PRDetailResult {
   pr: CachedPR
@@ -394,25 +587,6 @@ export interface PRDetailResult {
 }
 
 /**
- * Bot detection — uses the GitHub user `type` field (authoritative) plus
- * a pattern fallback for older accounts that don't set type correctly.
- * The `type === "Bot"` check catches all GitHub App bots (anything installed
- * via the Marketplace). The patterns are a safety net for edge cases.
- */
-const BOT_LOGIN_PATTERNS = [
-  /\[bot\]$/i,
-  /bot$/i, // catches most convention-following bots
-  /-bot$/i,
-  /^github-actions/i,
-]
-
-function isBot(login: string, userType?: string): boolean {
-  // GitHub's own classification — covers all Marketplace/App bots
-  if (userType === "Bot") return true
-  return BOT_LOGIN_PATTERNS.some((p) => p.test(login))
-}
-
-/**
  * Fetch full details for a single PR: diff stats, file list, reviewers, commits.
  */
 export async function fetchPRDetail(
@@ -421,7 +595,6 @@ export async function fetchPRDetail(
   repo: string,
   prNumber: number
 ): Promise<PRDetailResult> {
-  // Fetch PR, files, reviews, commits, and comments in parallel
   const [
     prData,
     filesData,
@@ -511,7 +684,6 @@ export async function fetchPRDetail(
     })
   )
 
-  // Dedupe reviewers (can have multiple review events per person)
   const reviewerMap = new Map<
     string,
     { login: string; state: string; avatarUrl: string }
@@ -534,9 +706,8 @@ export async function fetchPRDetail(
       return (commit.message as string) ?? ""
     })
     .filter(Boolean)
-    .map((m) => m.split("\n")[0]) // first line only
+    .map((m) => m.split("\n")[0])
 
-  // Process comments — merge issue comments + review comments, filter bots, sort chronologically
   const allComments: PRComment[] = []
 
   for (const c of (issueComments as Array<Record<string, unknown>>) ?? []) {
@@ -573,7 +744,6 @@ export async function fetchPRDetail(
     })
   }
 
-  // Sort chronologically and dedupe by id
   const seenIds = new Set<number>()
   const comments = allComments
     .sort(
@@ -592,100 +762,5 @@ export async function fetchPRDetail(
     reviewers: Array.from(reviewerMap.values()),
     commitMessages,
     comments,
-  }
-}
-
-/**
- * Fetch a user's repositories with stars, language, and descriptions.
- * Defaults to 5 top repos by stars. Cached for 1 hour.
- */
-export async function fetchUserRepos(
-  token: string,
-  username: string,
-  opts: FetchOptions = {}
-): Promise<RepoResult> {
-  const limit = opts.limit ?? 5
-
-  // Check cache
-  if (!opts.forceRefresh) {
-    const cached = await getCached(username)
-    if (cached && cached.reposJson.length > 0) {
-      return {
-        items: (cached.reposJson as CachedRepo[]).slice(0, limit),
-        totalCount: cached.repoCount,
-      }
-    }
-  }
-
-  // Fetch from GitHub REST API
-  const perPage = Math.max(limit, MIN_BATCH_SIZE)
-  const repos = await githubApi(
-    `/users/${encodeURIComponent(username)}/repos?per_page=${perPage}&sort=stargazers&direction=desc`,
-    token
-  )
-
-  const rawItems = (repos as Record<string, unknown>[]) ?? []
-  const transformed = rawItems.map(transformRepoItem)
-  const totalCount = transformed.length // REST doesn't give total_count for repos
-
-  // Also get total from profile
-  let profileRepoCount = totalCount
-  try {
-    const profile = await githubApi(
-      `/users/${encodeURIComponent(username)}`,
-      token
-    )
-    if (profile?.public_repos) profileRepoCount = profile.public_repos as number
-    await upsertCache(username, {
-      githubUserId: (profile?.id as number) ?? undefined,
-      profileJson: profile as Record<string, unknown>,
-      reposJson: transformed,
-      repoCount: profileRepoCount,
-    })
-  } catch {
-    await upsertCache(username, {
-      reposJson: transformed,
-      repoCount: totalCount,
-    })
-  }
-
-  return { items: transformed.slice(0, limit), totalCount: profileRepoCount }
-}
-
-/**
- * Fetch a user's contribution activity: calendar, pinned repos, enriched profile.
- * Cached for 1 hour via the graphql column.
- */
-export async function fetchUserActivity(
-  token: string,
-  username: string,
-  opts: Pick<FetchOptions, "forceRefresh"> = {}
-): Promise<ActivityResult> {
-  // Check cache for graphql data
-  if (!opts.forceRefresh) {
-    const cached = await getCached(username)
-    if (cached?.graphqlJson) {
-      // We have cached graphql — return it. Contributions aren't cached
-      // (they change daily) but graphql data (orgs, badges, sponsors) is stable.
-    }
-  }
-
-  // Fetch in parallel
-  const [graphql, contribs] = await Promise.all([
-    fetchUserGraphQL(token, username).catch(() => null),
-    fetchUserContributions(token, username).catch(() => null),
-  ])
-
-  // Cache graphql data
-  if (graphql) {
-    await upsertCache(username, {
-      graphqlJson: graphql as unknown as Record<string, unknown>,
-    })
-  }
-
-  return {
-    contributions: contribs?.contributions ?? null,
-    pinned: contribs?.pinned ?? [],
-    graphql,
   }
 }

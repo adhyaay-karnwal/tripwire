@@ -1,3 +1,4 @@
+import type { inferRouterOutputs } from "@trpc/server"
 import { createTRPCRouter } from "./init"
 import { orgsRouter } from "./routers/orgs"
 import { rulesRouter } from "./routers/rules"
@@ -19,6 +20,7 @@ import { adminOverviewRouter } from "./routers/admin-overview"
 import { visibilityRouter } from "./routers/visibility"
 import { onboardingRouter } from "./routers/onboarding"
 import { authRouter } from "./routers/auth"
+import { githubSignalsRouter } from "./routers/github-signals"
 
 export const trpcRouter = createTRPCRouter({
   orgs: orgsRouter,
@@ -42,6 +44,13 @@ export const trpcRouter = createTRPCRouter({
   visibility: visibilityRouter,
   onboarding: onboardingRouter,
   auth: authRouter,
+  githubSignals: githubSignalsRouter,
 })
 
 export type TRPCRouter = typeof trpcRouter
+
+// Inferred output shapes for every procedure, keyed by router/procedure
+// name — `RouterOutputs["events"]["get"]` is the resolved data type of
+// `trpc.events.get`. Consumers should reach for this instead of
+// hand-rolling response interfaces.
+export type RouterOutputs = inferRouterOutputs<TRPCRouter>

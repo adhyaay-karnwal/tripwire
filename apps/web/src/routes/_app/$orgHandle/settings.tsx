@@ -4,12 +4,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { authClient } from "@tripwire/auth/client"
 import { useAuth } from "@tripwire/auth/components"
 import { Button } from "@tripwire/ui/button"
-import { useWorkspace } from "#/lib/workspace-context"
+import { useWorkspace } from "#/providers/workspace-context"
 import { toastFromError } from "#/lib/toast-error"
-import { toastManager } from "#/components/ui/toast"
+import { toastManager } from "@tripwire/ui/toast"
+import { buildSeo, formatPageTitle, PRIVATE_ROUTE_HEADERS } from "#/lib/seo"
 
 export const Route = createFileRoute("/_app/$orgHandle/settings")({
   component: OrgSettingsPage,
+  headers: () => PRIVATE_ROUTE_HEADERS,
+  head: ({ match }) =>
+    buildSeo({
+      path: match.pathname,
+      title: formatPageTitle("Organization settings"),
+      description:
+        "Manage organization members, roles, and invitations for your Tripwire workspace.",
+      robots: "noindex",
+    }),
 })
 
 interface OrgMemberUser {
@@ -93,8 +103,7 @@ function OrgSettingsPage() {
           Organization
         </h1>
         <p className="m-0 font-['Inter',system-ui,sans-serif] text-sm leading-5 text-tw-text-secondary">
-          Settings for{" "}
-          <span className="text-tw-text-primary">{org.name}</span>.
+          Settings for <span className="text-tw-text-primary">{org.name}</span>.
         </p>
       </div>
 
@@ -199,11 +208,7 @@ function OrgProfileSection({
   )
 }
 
-function MembersSection({
-  members,
-  showEmails,
-  loading,
-}: MembersSectionProps) {
+function MembersSection({ members, showEmails, loading }: MembersSectionProps) {
   return (
     <SectionShell
       title={`Members${members.length > 0 ? ` (${members.length})` : ""}`}

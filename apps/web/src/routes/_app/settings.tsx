@@ -5,7 +5,8 @@ import {
   useRouterState,
   redirect,
 } from "@tanstack/react-router"
-import { useWorkspace } from "#/lib/workspace-context"
+import { useWorkspace } from "#/providers/workspace-context"
+import { PRIVATE_ROUTE_HEADERS } from "#/lib/seo"
 
 export const Route = createFileRoute("/_app/settings")({
   beforeLoad: ({ location }) => {
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/_app/settings")({
       throw redirect({ to: "/settings/general" })
     }
   },
+  headers: () => PRIVATE_ROUTE_HEADERS,
   component: SettingsLayout,
 })
 

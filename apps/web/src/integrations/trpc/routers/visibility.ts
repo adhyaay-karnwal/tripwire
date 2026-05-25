@@ -9,13 +9,14 @@ import {
   whitelistEntries,
   blacklistEntries,
   visibilitySyncRuns,
+  organizations,
   repositories,
   user,
   type EventAction,
   type EventSeverity,
 } from "@tripwire/db"
 import { inngest } from "#/inngest/client"
-import { isValidGithubLogin } from "#/lib/github-login-validation"
+import { isValidGithubLogin } from "#/lib/github/login-validation"
 import {
   blacklistJoinClause,
   excludeMaintainerSelf,
@@ -274,8 +275,7 @@ export const visibilityRouter = {
             targetGithubUsername: username,
             targetGithubUserId:
               repRows.find(
-                (r) =>
-                  r.githubUsername.toLowerCase() === username.toLowerCase()
+                (r) => r.githubUsername.toLowerCase() === username.toLowerCase()
               )?.githubUserId ?? undefined,
             metadata: { actor, source: "visibility_bulk" },
           })
@@ -310,6 +310,7 @@ export const visibilityRouter = {
         })
         .from(githubReputation)
         .innerJoin(repositories, eq(repositories.id, githubReputation.repoId))
+        .innerJoin(organizations, eq(organizations.id, repositories.orgId))
         .leftJoin(whitelistEntries, whitelistJoinClause(input.repoId))
         .leftJoin(blacklistEntries, blacklistJoinClause(input.repoId))
         .where(
@@ -364,6 +365,7 @@ export const visibilityRouter = {
         })
         .from(githubReputation)
         .innerJoin(repositories, eq(repositories.id, githubReputation.repoId))
+        .innerJoin(organizations, eq(organizations.id, repositories.orgId))
         .leftJoin(whitelistEntries, whitelistJoinClause(input.repoId))
         .leftJoin(blacklistEntries, blacklistJoinClause(input.repoId))
         .where(
@@ -484,17 +486,15 @@ async function addToList(opts: {
   opposite: ListTable
 }): Promise<string[]> {
   const inserted = await db.transaction(async (tx) => {
-    await tx
-      .delete(opts.opposite)
-      .where(
-        and(
-          eq(opts.opposite.repoId, opts.repoId),
-          lowerInArray(
-            opts.opposite.githubUsername,
-            opts.rows.map((r) => r.githubUsername)
-          )
+    await tx.delete(opts.opposite).where(
+      and(
+        eq(opts.opposite.repoId, opts.repoId),
+        lowerInArray(
+          opts.opposite.githubUsername,
+          opts.rows.map((r) => r.githubUsername)
         )
       )
+    )
     return tx
       .insert(opts.table)
       .values(

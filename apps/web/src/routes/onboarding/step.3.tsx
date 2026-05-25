@@ -2,13 +2,22 @@ import { useState } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTRPC } from "#/integrations/trpc/react"
-import { StepShell } from "#/components/onboarding/step-shell"
+import { StepShell } from "#/components/layout/onboarding/step-shell"
 import { toastFromError } from "#/lib/toast-error"
-import { Checkbox } from "#/components/ui/checkbox"
+import { Checkbox } from "@tripwire/ui/checkbox"
 import { Button } from "@tripwire/ui/button"
+import { buildSeo, formatPageTitle, PRIVATE_ROUTE_HEADERS } from "#/lib/seo"
 
 export const Route = createFileRoute("/onboarding/step/3")({
   component: Step3Page,
+  headers: () => PRIVATE_ROUTE_HEADERS,
+  head: ({ match }) =>
+    buildSeo({
+      path: match.pathname,
+      title: formatPageTitle("Pick your rules"),
+      description: "Choose the moderation rules you want Tripwire to enforce.",
+      robots: "noindex",
+    }),
 })
 
 interface FieldProps {
@@ -176,11 +185,7 @@ function Field({ label, hint, children }: FieldProps) {
   )
 }
 
-function Pills<T extends string>({
-  options,
-  value,
-  onChange,
-}: PillsProps<T>) {
+function Pills<T extends string>({ options, value, onChange }: PillsProps<T>) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => (

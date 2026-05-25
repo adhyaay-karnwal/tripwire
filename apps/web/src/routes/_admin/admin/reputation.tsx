@@ -3,14 +3,23 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@tripwire/ui/button"
 import { eventScoreImpact } from "@tripwire/core/contributor-score"
-import { Checkbox } from "#/components/ui/checkbox"
+import { Checkbox } from "@tripwire/ui/checkbox"
 import { useTRPC } from "#/integrations/trpc/react"
 import { toastFromError } from "#/lib/toast-error"
-import { toastManager } from "#/components/ui/toast"
+import { toastManager } from "@tripwire/ui/toast"
 import { formatRelativeTime } from "#/lib/format"
+import { buildSeo, formatPageTitle } from "#/lib/seo"
 
 export const Route = createFileRoute("/_admin/admin/reputation")({
   component: AdminReputationPage,
+  head: ({ match }) =>
+    buildSeo({
+      path: match.pathname,
+      title: formatPageTitle("Admin: reputation"),
+      description:
+        "Review and adjust contributor reputation scores across all repos.",
+      robots: "noindex",
+    }),
 })
 
 interface ReputationRow {
@@ -100,8 +109,8 @@ function AdminReputationPage() {
           Reputation
         </h1>
         <p className="m-0 text-[13px] text-tw-text-muted">
-          Look up a contributor across repos, edit their counters or score,
-          and delete events surgically.
+          Look up a contributor across repos, edit their counters or score, and
+          delete events surgically.
         </p>
       </div>
 
@@ -292,7 +301,7 @@ function NumberField({ label, value, onChange }: NumberFieldProps) {
         type="number"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-tw-border bg-tw-surface p-2.5 text-[13px] tabular-nums text-tw-text-primary transition-colors outline-none focus:border-tw-accent"
+        className="w-full rounded-lg border border-tw-border bg-tw-surface p-2.5 text-[13px] text-tw-text-primary tabular-nums transition-colors outline-none focus:border-tw-accent"
       />
     </div>
   )
