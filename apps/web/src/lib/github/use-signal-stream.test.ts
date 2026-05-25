@@ -89,8 +89,7 @@ describe("invalidateMatching", () => {
     })
 
     const count = invalidateMatching(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal stub for unit test
-      client as any,
+      client,
       [targetA, targetB],
       ["user:torvalds"],
     )
@@ -112,8 +111,7 @@ describe("invalidateMatching", () => {
     })
 
     const count = invalidateMatching(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal stub for unit test
-      client as any,
+      client,
       [target],
       ["user:x"],
     )
@@ -135,8 +133,7 @@ describe("invalidateMatching", () => {
     })
 
     const count = invalidateMatching(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal stub for unit test
-      client as any,
+      client,
       [target],
       ["user:x"],
     )
@@ -153,8 +150,7 @@ describe("invalidateMatching", () => {
     const { client, invalidated } = createMockClient({})
 
     const count = invalidateMatching(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal stub for unit test
-      client as any,
+      client,
       [target],
       ["user:x"],
     )
