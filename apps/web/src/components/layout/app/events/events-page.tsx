@@ -7,7 +7,11 @@ import { RULE_META } from "@tripwire/db/schema/rule-meta"
 import { EmptyState } from "#/components/shared/empty-state"
 import { markEventsViewed } from "#/hooks/use-events-unread"
 import { isCustomRuleName, stripCustomRulePrefix } from "#/lib/custom-rules"
-import { EVENT_SUMMARY_ITEMS } from "#/lib/events-design"
+import {
+  EVENT_SUMMARY_ITEMS,
+  eventActionLabel,
+  type EventFilterAction,
+} from "#/lib/events-design"
 import { useGitHubSignalStream } from "#/lib/github/use-signal-stream"
 import { useRepoSignalTargets } from "#/lib/github/use-repo-signal-targets"
 import { routes } from "#/lib/routes"
@@ -31,28 +35,8 @@ type Event = {
   createdAt: string | Date
 }
 
-const ACTION_LABELS = {
-  pipeline_allowed: "Allowed",
-  pipeline_blocked: "Blocked",
-  pr_closed: "PR Closed",
-  issue_closed: "Issue Closed",
-  issue_deleted: "Issue Closed",
-  comment_deleted: "Comment Deleted",
-  rule_near_miss: "Near Miss",
-  whitelist_bypass: "Whitelist Bypass",
-  blacklist_blocked: "Blacklist Block",
-  rule_config_updated: "Config Updated",
-  whitelist_added: "Whitelist +",
-  whitelist_removed: "Whitelist −",
-  blacklist_added: "Blacklist +",
-  blacklist_removed: "Blacklist −",
-  workflow_run: "Workflow Run",
-} as const
-
-type FilterAction = keyof typeof ACTION_LABELS
-
 type FilterState = {
-  action: FilterAction | null
+  action: EventFilterAction | null
   username: string
 }
 
@@ -66,12 +50,6 @@ const CONTENT_TYPE_LABELS: Record<string, string> = {
   pull_request: "PR",
   issue: "Issue",
   comment: "Comment",
-}
-
-function getActionLabel(action: string): string {
-  return action in ACTION_LABELS
-    ? ACTION_LABELS[action as keyof typeof ACTION_LABELS]
-    : action
 }
 
 function timeAgo(dateStr: string | Date): string {
@@ -97,7 +75,7 @@ const NON_CLICKABLE_ACTIONS = new Set([
 
 function EventRow({ event }: { event: Event }) {
   const dotColor = severityDotColor(event.severity)
-  const actionLabel = getActionLabel(event.action)
+  const actionLabel = eventActionLabel(event.action)
   const isClickable = !NON_CLICKABLE_ACTIONS.has(event.action)
 
   const content = (
