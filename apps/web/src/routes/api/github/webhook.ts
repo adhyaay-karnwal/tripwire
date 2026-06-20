@@ -396,7 +396,11 @@ function normalizeRepoActivityEvent(
   if (event === "push") {
     return normalizePushActivity(payload, ctx)
   }
-  if (event === "release" && payload.action === "published" && payload.release) {
+  if (
+    event === "release" &&
+    payload.action === "published" &&
+    payload.release
+  ) {
     const release = payload.release
     const name = release.name || release.tag_name || "release"
     return {
@@ -463,7 +467,8 @@ function pullRequestAction(
   if (action === "opened") return "github_pr_opened"
   if (action === "reopened") return "github_pr_reopened"
   if (action === "synchronize") return "github_pr_synchronized"
-  if (action === "closed") return merged ? "github_pr_merged" : "github_pr_closed"
+  if (action === "closed")
+    return merged ? "github_pr_merged" : "github_pr_closed"
   return null
 }
 
@@ -540,7 +545,8 @@ function normalizePushActivity(
   const head = payload.after ?? payload.head_commit?.id ?? null
   const before = payload.before ?? null
   const repoUrl = `https://github.com/${ctx.repoFullName}`
-  const url = head && before ? `${repoUrl}/compare/${before}...${head}` : repoUrl
+  const url =
+    head && before ? `${repoUrl}/compare/${before}...${head}` : repoUrl
 
   return {
     action: "github_push",
