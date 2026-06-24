@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm"
+import { eq, and, asc } from "drizzle-orm"
 import { db } from "@tripwire/db/client"
 import { organizations, repositories, account, member } from "@tripwire/db"
 import { createAppJwt, getInstallationToken } from "@tripwire/github"
@@ -49,6 +49,40 @@ async function fetchInstallationMeta(
 }
 
 /**
+ * Decide which Better Auth org a new installation attaches to. Prefers the
+ * org the user was viewing at install time (`preferredBaOrgId`) once we
+ * confirm they're actually a member — this is what fixes installs landing on
+ * the wrong workspace. Falls back to the user's earliest owner membership
+ * (deterministic, unlike an unordered `limit(1)`).
+ */
+async function resolveTargetOrg(
+  userId: string,
+  preferredBaOrgId?: string | null
+): Promise<string | null> {
+  if (preferredBaOrgId) {
+    const [membership] = await db
+      .select({ id: member.id })
+      .from(member)
+      .where(
+        and(
+          eq(member.userId, userId),
+          eq(member.organizationId, preferredBaOrgId)
+        )
+      )
+      .limit(1)
+    if (membership) return preferredBaOrgId
+  }
+
+  const [ownerMembership] = await db
+    .select({ organizationId: member.organizationId })
+    .from(member)
+    .where(and(eq(member.userId, userId), eq(member.role, "owner")))
+    .orderBy(asc(member.createdAt))
+    .limit(1)
+  return ownerMembership?.organizationId ?? null
+}
+
+/**
  * Ensure the org + repos exist for this installation, and verify that the
  * GitHub account that owns the installation is linked to the session user
  * (via better-auth `account` row).
@@ -58,7 +92,8 @@ async function fetchInstallationMeta(
  */
 export async function ensureInstallation(
   installationId: number,
-  userId: string
+  userId: string,
+  preferredBaOrgId?: string | null
 ): Promise<"ok" | "installer_mismatch"> {
   const [existing] = await db
     .select()
@@ -128,11 +163,7 @@ export async function ensureInstallation(
 
   const ghAccount = repos[0].owner
 
-  const [ownerMembership] = await db
-    .select({ organizationId: member.organizationId })
-    .from(member)
-    .where(and(eq(member.userId, userId), eq(member.role, "owner")))
-    .limit(1)
+  const betterAuthOrgId = await resolveTargetOrg(userId, preferredBaOrgId)
 
   const [org] = await db
     .insert(organizations)
@@ -143,7 +174,7 @@ export async function ensureInstallation(
       githubAccountType: ghAccount.type ?? "User",
       avatarUrl: ghAccount.avatar_url,
       ownerId: userId,
-      betterAuthOrgId: ownerMembership?.organizationId ?? null,
+      betterAuthOrgId,
     })
     .returning()
 

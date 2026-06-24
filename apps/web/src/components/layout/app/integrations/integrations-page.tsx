@@ -19,7 +19,10 @@ export function IntegrationsPageSkeleton() {
 }
 
 export function IntegrationsPage() {
-  const { repos, repo, setRepo, isLoading } = useWorkspace()
+  const { org, repos, repo, setRepo, isLoading } = useWorkspace()
+  const installHref = org
+    ? `${routes.api.githubInstall}?org=${encodeURIComponent(org.id)}`
+    : routes.api.githubInstall
   const queryClient = useQueryClient()
 
   // When the user finishes configuring the GitHub App on github.com and
@@ -64,11 +67,7 @@ export function IntegrationsPage() {
             variant="outline"
             className="shrink-0 border-[#CDCDCD] bg-white px-1 text-black hover:bg-white/90"
             render={
-              <a
-                href={routes.api.githubInstall}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={installHref} target="_blank" rel="noopener noreferrer">
                 {repos.length > 0 ? "Manage" : "Install"}
               </a>
             }
