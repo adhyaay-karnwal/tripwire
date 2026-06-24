@@ -1,12 +1,27 @@
 import { useQueryClient, useQuery } from "@tanstack/react-query"
-import { useCallback } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { Button } from "@tripwire/ui/button"
-import { SuccessCheckStrokeIcon14 } from "@tripwire/ui/icons/app-chrome-icons"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@tripwire/ui/pagination"
+import { GithubIcon } from "@tripwire/ui/icons/github"
+import {
+  SearchLoupeOutlineIcon14,
+  SuccessCheckStrokeIcon14,
+} from "@tripwire/ui/icons/app-chrome-icons"
 import { GitHubMarkWhiteIcon20 } from "@tripwire/ui/icons/github-mark-icon"
 import { useWorkspace } from "#/providers/workspace-context"
 import { useTRPC } from "#/integrations/trpc/react"
 import { routes } from "#/lib/routes"
+import { buildPageItems } from "#/lib/pagination"
 import { useRefreshOnReturn } from "#/lib/use-refresh-on-return"
+
+const REPOS_PER_PAGE = 6
 
 export function IntegrationsPageSkeleton() {
   return (
@@ -36,6 +51,22 @@ export function IntegrationsPage() {
   )
   const installations = installationsQuery.data ?? []
   const isConnected = installations.length > 0
+
+  const [query, setQuery] = useState("")
+  const [page, setPage] = useState(1)
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return repos
+    return repos.filter((r) => r.fullName.toLowerCase().includes(q))
+  }, [repos, query])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / REPOS_PER_PAGE))
+  const safePage = Math.min(page, totalPages)
+  const visibleRepos = filtered.slice(
+    (safePage - 1) * REPOS_PER_PAGE,
+    safePage * REPOS_PER_PAGE
+  )
 
   // When the user finishes configuring the GitHub App on github.com and
   // returns to this tab, we have no webhook signal that says "install
@@ -153,45 +184,125 @@ export function IntegrationsPage() {
               {repos.length} connected
             </span>
           </div>
-          <div className="rounded-xl border border-tw-border bg-tw-card p-1.5">
+
+          {repos.length > REPOS_PER_PAGE && (
+            <div className="relative mb-2">
+              <SearchLoupeOutlineIcon14 className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-tw-text-muted" />
+              <input
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  setPage(1)
+                }}
+                placeholder="Filter repositories…"
+                className="h-9 w-full rounded-lg border border-tw-border bg-tw-card pr-3 pl-9 text-[13px] text-tw-text-primary placeholder:text-tw-text-muted focus:border-tw-text-muted focus:outline-none"
+              />
+            </div>
+          )}
+
+          <div className="overflow-hidden rounded-xl border border-tw-border bg-tw-card">
             {isLoading ? (
-              <div className="py-4 text-center text-sm text-tw-text-muted">
+              <div className="py-6 text-center text-sm text-tw-text-muted">
                 Loading repositories…
               </div>
             ) : repos.length === 0 ? (
-              <div className="px-3 py-4 text-[13px] text-tw-text-muted">
+              <div className="px-4 py-5 text-[13px] text-tw-text-muted">
                 This account has no repositories with the Tripwire App
                 installed yet. Use Manage to grant repository access.
               </div>
+            ) : filtered.length === 0 ? (
+              <div className="px-4 py-5 text-[13px] text-tw-text-muted">
+                No repositories match “{query}”.
+              </div>
             ) : (
-              <div className="flex flex-col">
-                {repos.map((r) => {
+              <div className="divide-y divide-tw-border">
+                {visibleRepos.map((r) => {
                   const isSelected = repo?.id === r.id
+                  const [owner, ...rest] = r.fullName.split("/")
+                  const name = rest.join("/") || owner
                   return (
-                    <Button
-                      variant="ghost"
+                    // biome-ignore lint/correctness/noRestrictedElements: two-line repo row needs a native button for custom layout
+                    <button
                       key={r.id}
                       type="button"
                       onClick={() => setRepo(r)}
-                      className={`w-full cursor-pointer justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                        isSelected
-                          ? "bg-tw-hover text-tw-text-primary"
-                          : "text-tw-text-secondary hover:bg-tw-hover hover:text-tw-text-primary"
+                      className={`group flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                        isSelected ? "bg-tw-hover" : "hover:bg-tw-hover-light"
                       }`}
                     >
-                      <span className="truncate font-mono text-[13px]">
-                        {r.fullName}
+                      <GithubIcon
+                        className={`size-4 shrink-0 ${isSelected ? "text-tw-text-primary" : "text-tw-text-muted"}`}
+                      />
+                      <span className="flex min-w-0 flex-col leading-tight">
+                        <span className="truncate text-[13px] font-medium text-tw-text-primary">
+                          {name}
+                        </span>
+                        {rest.length > 0 && (
+                          <span className="truncate text-[11px] text-tw-text-muted">
+                            {owner}
+                          </span>
+                        )}
                       </span>
-                      {isSelected && (
-                        <SuccessCheckStrokeIcon14 className="shrink-0 text-tw-success" />
-                      )}
-                    </Button>
+                      <span className="ml-auto flex shrink-0 items-center">
+                        {isSelected ? (
+                          <span className="flex items-center gap-1.5 text-[11px] font-medium text-tw-success">
+                            <SuccessCheckStrokeIcon14 />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-tw-text-tertiary opacity-0 transition-opacity group-hover:opacity-100">
+                            Select
+                          </span>
+                        )}
+                      </span>
+                    </button>
                   )
                 })}
               </div>
             )}
           </div>
-          <p className="mt-2 px-1 text-[12px] text-tw-text-muted">
+
+          {totalPages > 1 && (
+            <Pagination className="mt-3 justify-between">
+              <PaginationContent className="w-full justify-between">
+                <PaginationItem>
+                  <PaginationPrevious
+                    disabled={safePage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  />
+                </PaginationItem>
+                <div className="flex items-center gap-1">
+                  {buildPageItems(safePage, totalPages).map((item, i) =>
+                    item === "ellipsis" ? (
+                      <span
+                        key={`e${i}`}
+                        className="px-1 text-[13px] text-tw-text-muted"
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <PaginationItem key={item}>
+                        <PaginationLink
+                          isActive={item === safePage}
+                          onClick={() => setPage(item)}
+                        >
+                          {item}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  )}
+                </div>
+                <PaginationItem>
+                  <PaginationNext
+                    disabled={safePage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          )}
+
+          <p className="mt-3 px-1 text-[12px] text-tw-text-muted">
             The active repository is the one Tripwire shows across rules,
             events, and insights.
           </p>
