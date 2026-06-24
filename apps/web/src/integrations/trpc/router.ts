@@ -17,6 +17,7 @@ import { researchRouter } from "./routers/research"
 import { adminReputationRouter } from "./routers/admin-reputation"
 import { adminOverviewRouter } from "./routers/admin-overview"
 import { visibilityRouter } from "./routers/visibility"
+import { moderationRouter } from "./routers/moderation"
 import { onboardingRouter } from "./routers/onboarding"
 import { authRouter } from "./routers/auth"
 import { githubSignalsRouter } from "./routers/github-signals"
@@ -40,6 +41,7 @@ export const trpcRouter = createTRPCRouter({
   adminReputation: adminReputationRouter,
   adminOverview: adminOverviewRouter,
   visibility: visibilityRouter,
+  moderation: moderationRouter,
   onboarding: onboardingRouter,
   auth: authRouter,
   githubSignals: githubSignalsRouter,
