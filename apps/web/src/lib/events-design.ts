@@ -41,7 +41,7 @@ export const EVENT_ACTION_LABELS = {
   pipeline_blocked: "Blocked",
   pr_closed: "PR Closed",
   issue_closed: "Issue Closed",
-  issue_deleted: "Issue Closed",
+  issue_deleted: "Issue Deleted",
   comment_deleted: "Comment Deleted",
   rule_near_miss: "Near Miss",
   whitelist_bypass: "Whitelist Bypass",
