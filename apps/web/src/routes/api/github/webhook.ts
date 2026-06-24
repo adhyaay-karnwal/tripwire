@@ -22,6 +22,9 @@ import {
 } from "@tripwire/github/webhook-event"
 import { getGitHubWebhookRevalidationSignalKeys } from "#/lib/github/revalidation"
 import { broadcastSignalKeys } from "@tripwire/github/signal-broker"
+import { createLogger } from "@tripwire/logger"
+
+const log = createLogger("webhook")
 
 type WebhookCtx = {
   installationId: number
@@ -152,7 +155,7 @@ async function safeMarkProcessed(deliveryId: string | null): Promise<void> {
   try {
     await markGitHubWebhookEventProcessed(deliveryId)
   } catch (err) {
-    console.error("[Webhook] failed to mark processed:", err)
+    log.error("failed to mark processed:", err)
   }
 }
 
@@ -167,14 +170,14 @@ async function safeMarkFailed(
       err instanceof Error ? err.message : String(err)
     )
   } catch (logErr) {
-    console.error("[Webhook] failed to record processing error:", logErr)
+    log.error("failed to record processing error:", logErr)
   }
 }
 
 async function handler({ request }: { request: Request }) {
   const secret = process.env.GITHUB_WEBHOOK_SECRET
   if (!secret) {
-    console.error("[Webhook] GITHUB_WEBHOOK_SECRET is not configured")
+    log.error("GITHUB_WEBHOOK_SECRET is not configured")
     return new Response("Server misconfigured", { status: 500 })
   }
 
@@ -188,7 +191,7 @@ async function handler({ request }: { request: Request }) {
   const event = request.headers.get("x-github-event")
   const deliveryId = request.headers.get("x-github-delivery")
   const payload = JSON.parse(body) as GitHubWebhookPayload
-  console.log("[Webhook] Event:", event, "| Action:", payload.action)
+  log.info("Event:", event, "| Action:", payload.action)
 
   // Idempotency: GitHub retries reuse the same X-GitHub-Delivery UUID.
   // Insert-or-ignore against `github_webhook_event` — if the row already
@@ -207,13 +210,12 @@ async function handler({ request }: { request: Request }) {
       })
     } catch (err) {
       // Fail open: better to process twice than to silently drop the webhook.
-      console.error(
-        "[Webhook] failed to record delivery, processing anyway:",
+      log.error("failed to record delivery, processing anyway:",
         err
       )
     }
     if (!isNewDelivery) {
-      console.log("[Webhook] duplicate delivery, skipping:", deliveryId)
+      log.info("duplicate delivery, skipping:", deliveryId)
       return new Response("OK (duplicate)", { status: 200 })
     }
   }
@@ -228,7 +230,7 @@ async function handler({ request }: { request: Request }) {
       await markGitHubRevalidationSignals(signalKeys)
       broadcastSignalKeys(signalKeys)
     } catch (err) {
-      console.error("[Webhook] mark signals failed:", err)
+      log.error("mark signals failed:", err)
     }
   }
 
@@ -243,13 +245,13 @@ async function handler({ request }: { request: Request }) {
       if (isInstallationPayload(payload)) {
         await handleInstallation(payload)
       } else {
-        console.warn("[Webhook] installation payload missing required fields")
+        log.warn("installation payload missing required fields")
       }
     } else if (event === "installation_repositories") {
       if (isInstallationReposPayload(payload)) {
         await handleInstallationRepositories(payload)
       } else {
-        console.warn("[Webhook] installation_repositories payload invalid")
+        log.warn("installation_repositories payload invalid")
       }
     } else if (payload.repository) {
       const repo = payload.repository
@@ -265,7 +267,7 @@ async function handler({ request }: { request: Request }) {
     }
     await safeMarkProcessed(deliveryId)
   } catch (err) {
-    console.error("Webhook handler error:", err)
+    log.error("handler error:", err)
     await safeMarkFailed(deliveryId, err)
   }
 
