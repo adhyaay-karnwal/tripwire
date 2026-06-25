@@ -1,10 +1,10 @@
+import type { CSSProperties } from "react"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@tripwire/ui/tooltip"
-import Dither from "#/components/shared/dither"
 
 export type ContributorScore = {
   total: number
@@ -14,41 +14,45 @@ export type ContributorScore = {
   redFlags: number
 }
 
-type Rgb = [number, number, number]
-
 type Segment = {
   key: "globalReputation" | "communitySignals" | "repoHistory"
   label: string
-  rgb: Rgb
+  color: string
 }
 
 const SCORE_SEGMENTS: readonly Segment[] = [
-  { key: "globalReputation", label: "Global reputation", rgb: [0.2, 0.65, 1] },
-  { key: "communitySignals", label: "Community signals", rgb: [0.65, 0.55, 0.98] },
-  { key: "repoHistory", label: "Repo history", rgb: [0.4, 0.88, 0.62] },
+  { key: "globalReputation", label: "Global reputation", color: "#34A6FF" },
+  { key: "communitySignals", label: "Community signals", color: "#A78BFA" },
+  { key: "repoHistory", label: "Repo history", color: "#67E19F" },
 ]
 
-const RED_FLAG_RGB: Rgb = [0.96, 0.43, 0.36]
+const RED_FLAG_COLOR = "#F56D5D"
+
+// 4×4 ordered dither: a handful of pixels nudged lighter/darker so the fill
+// reads as a couple of slight variations of the base color rather than flat.
+const DITHER_OVERLAY = `url("data:image/svg+xml;utf8,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4' shape-rendering='crispEdges'>" +
+    "<rect x='0' y='0' width='1' height='1' fill='#fff' opacity='0.16'/>" +
+    "<rect x='3' y='1' width='1' height='1' fill='#fff' opacity='0.16'/>" +
+    "<rect x='1' y='2' width='1' height='1' fill='#000' opacity='0.16'/>" +
+    "<rect x='2' y='3' width='1' height='1' fill='#000' opacity='0.16'/>" +
+    "</svg>"
+)}")`
+
+function ditherStyle(color: string): CSSProperties {
+  return {
+    backgroundColor: color,
+    backgroundImage: DITHER_OVERLAY,
+    backgroundSize: "4px 4px",
+    backgroundRepeat: "repeat",
+    imageRendering: "pixelated",
+  }
+}
 
 function scoreColor(total: number): string {
   if (total >= 70) return "#67E19F"
   if (total >= 40) return "#D1BC00"
   return "#F56D5D"
-}
-
-/** Tinted dither fill for one bar segment. */
-function BarDither({ rgb }: { rgb: Rgb }) {
-  return (
-    <Dither
-      waveColor={rgb}
-      waveSpeed={0.03}
-      waveFrequency={3}
-      waveAmplitude={0.3}
-      colorNum={4}
-      pixelSize={2}
-      enableMouseInteraction={false}
-    />
-  )
 }
 
 export function ContributorScoreBadge({ total }: { total: number }) {
@@ -63,12 +67,13 @@ export function ContributorScoreBadge({ total }: { total: number }) {
   )
 }
 
-/** Dither placeholder shown while the contributor score loads. */
+/** Dithered placeholder shown while the contributor score loads. */
 export function ContributorScoreBarLoading() {
   return (
-    <div className="relative h-1.5 overflow-hidden rounded-full bg-tw-surface">
-      <BarDither rgb={[0.36, 0.56, 0.85]} />
-    </div>
+    <div
+      className="h-1.5 overflow-hidden rounded-full"
+      style={ditherStyle("#4A5B7A")}
+    />
   )
 }
 
@@ -84,11 +89,13 @@ export function ContributorScoreBar({ score }: { score: ContributorScore }) {
               <TooltipTrigger
                 render={
                   <div
-                    className="relative h-full cursor-help overflow-hidden rounded-full"
-                    style={{ width: `${value}%`, minWidth: "2px" }}
-                  >
-                    <BarDither rgb={segment.rgb} />
-                  </div>
+                    className="h-full cursor-help rounded-full"
+                    style={{
+                      width: `${value}%`,
+                      minWidth: "2px",
+                      ...ditherStyle(segment.color),
+                    }}
+                  />
                 }
               />
               <TooltipContent>{segment.label}</TooltipContent>
@@ -100,14 +107,13 @@ export function ContributorScoreBar({ score }: { score: ContributorScore }) {
             <TooltipTrigger
               render={
                 <div
-                  className="relative h-full cursor-help overflow-hidden rounded-full"
+                  className="h-full cursor-help rounded-full"
                   style={{
                     width: `${Math.abs(score.redFlags)}%`,
                     minWidth: "2px",
+                    ...ditherStyle(RED_FLAG_COLOR),
                   }}
-                >
-                  <BarDither rgb={RED_FLAG_RGB} />
-                </div>
+                />
               }
             />
             <TooltipContent>Red flags</TooltipContent>
