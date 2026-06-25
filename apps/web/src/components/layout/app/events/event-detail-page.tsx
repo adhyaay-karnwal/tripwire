@@ -21,6 +21,7 @@ import { getContentTypeLabel, getEventTitle } from "#/lib/event-labels"
 import {
   ContributorScoreBadge,
   ContributorScoreBar,
+  ContributorScoreBarLoading,
   type ContributorScore,
 } from "#/components/shared/contributor-score-bar"
 import { GitHubMarkWhiteIcon20 } from "@tripwire/ui/icons/github-mark-icon"
@@ -378,15 +379,19 @@ function ContributorBlock({
           </a>
         </div>
 
-        {score && (
+        {(score || isLoading) && (
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-[12px] text-tw-text-tertiary">
                 Trust score
               </span>
-              <ContributorScoreBadge total={score.total} />
+              {score && <ContributorScoreBadge total={score.total} />}
             </div>
-            <ContributorScoreBar score={score} />
+            {score ? (
+              <ContributorScoreBar score={score} />
+            ) : (
+              <ContributorScoreBarLoading />
+            )}
           </div>
         )}
 

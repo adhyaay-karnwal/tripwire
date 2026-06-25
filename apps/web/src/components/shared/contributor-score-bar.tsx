@@ -4,6 +4,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@tripwire/ui/tooltip"
+import Dither from "#/components/shared/dither"
 
 export type ContributorScore = {
   total: number
@@ -43,10 +44,31 @@ export function ContributorScoreBadge({ total }: { total: number }) {
   )
 }
 
+/**
+ * Breathing dither placeholder shown while the contributor score loads — a
+ * single WebGL canvas masked to the bar shape (one GL context, unlike a
+ * per-segment dither which would blow the context budget).
+ */
+export function ContributorScoreBarLoading() {
+  return (
+    <div className="relative h-1.5 animate-breathe overflow-hidden rounded-full bg-tw-surface">
+      <Dither
+        waveColor={[0.36, 0.56, 0.85]}
+        waveSpeed={0.03}
+        waveFrequency={3}
+        waveAmplitude={0.3}
+        colorNum={4}
+        pixelSize={2}
+        enableMouseInteraction={false}
+      />
+    </div>
+  )
+}
+
 export function ContributorScoreBar({ score }: { score: ContributorScore }) {
   return (
     <TooltipProvider delay={120}>
-      <div className="flex h-1.5 gap-[1px] overflow-hidden rounded-full bg-tw-surface">
+      <div className="flex h-1.5 animate-breathe-soft gap-[1px] overflow-hidden rounded-full bg-tw-surface">
         {SCORE_SEGMENTS.map((segment) => {
           const value = score[segment.key]
           if (value <= 0) return null
