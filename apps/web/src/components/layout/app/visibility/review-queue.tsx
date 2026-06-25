@@ -31,6 +31,7 @@ type ResolveAction =
   | "allow"
   | "dismiss"
   | "snooze"
+  | "remove"
   | "whitelist"
   | "blacklist"
   | "watch"
@@ -200,14 +201,24 @@ function QueueRow({
 
       <div className="flex shrink-0 items-center gap-1.5">
         {isContent ? (
-          <Button
-            variant="secondary"
-            size="xs"
-            loading={pending}
-            onClick={() => onAction("allow")}
-          >
-            Allow
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              size="xs"
+              loading={pending}
+              onClick={() => onAction("allow")}
+            >
+              Allow
+            </Button>
+            <Button
+              variant="destructive-outline"
+              size="xs"
+              disabled={pending}
+              onClick={() => onAction("remove")}
+            >
+              Remove
+            </Button>
+          </>
         ) : (
           <>
             <Button

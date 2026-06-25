@@ -16,6 +16,7 @@ import {
 } from "@tripwire/db"
 import { trpcError } from "../error"
 import { getEventActionLabel } from "#/lib/event-labels"
+import { removeFlaggedContent } from "#/lib/github/moderation-actions"
 
 import type { TRPCRouterRecord } from "@trpc/server"
 
@@ -23,6 +24,7 @@ const resolveActionEnum = z.enum([
   "allow",
   "dismiss",
   "snooze",
+  "remove",
   "whitelist",
   "blacklist",
   "watch",
@@ -111,7 +113,31 @@ export const moderationRouter = {
       const username = item.targetGithubUsername
       const userId = item.targetGithubUserId
 
-      if (input.action === "whitelist" || input.action === "blacklist") {
+      if (input.action === "remove") {
+        if (item.subject !== "content") {
+          throw trpcError({
+            code: "moderation.not_content",
+            status: 400,
+            message: "This item has no GitHub content to remove",
+          })
+        }
+        await removeFlaggedContent(item)
+        await logEvent({
+          repoId: item.repoId,
+          action:
+            item.contentType === "comment"
+              ? "comment_deleted"
+              : item.contentType === "issue"
+                ? "issue_closed"
+                : "pr_closed",
+          severity: "info",
+          description: `Removed ${item.githubRef ?? "content"} from review queue`,
+          contentType: item.contentType ?? undefined,
+          githubRef: item.githubRef ?? undefined,
+          targetGithubUsername: username ?? undefined,
+          targetGithubUserId: userId ?? undefined,
+        })
+      } else if (input.action === "whitelist" || input.action === "blacklist") {
         if (!username) {
           throw trpcError({
             code: "moderation.no_target_user",
