@@ -28,7 +28,9 @@ import {
 import {
   ISSUE_EVAL_ACTIONS,
   PR_EVAL_ACTIONS,
+  workflowTriggersForEvent,
 } from "#/constants/webhook-events"
+import { runWorkflowsForEvent } from "#/lib/workflow/dispatch"
 import { broadcastSignalKeys } from "@tripwire/github/signal-broker"
 import { createLogger } from "@tripwire/logger"
 
@@ -298,6 +300,16 @@ async function handleRepoEvent(
         pr.body ?? undefined,
         pr.head?.sha
       )
+      if (repoRow) {
+        await dispatchWorkflows(
+          ctx,
+          repoRow.id,
+          "pull_request",
+          "pr",
+          pr.number,
+          payload.action
+        )
+      }
       break
     }
 
@@ -307,6 +319,16 @@ async function handleRepoEvent(
         break
       }
       await handleIssue(ctx, issue.number, issue.title, issue.body ?? undefined)
+      if (repoRow) {
+        await dispatchWorkflows(
+          ctx,
+          repoRow.id,
+          "issues",
+          "issue",
+          issue.number,
+          payload.action
+        )
+      }
       break
     }
 
@@ -327,9 +349,39 @@ async function handleRepoEvent(
         issue.number,
         comment.body ?? undefined
       )
+      if (repoRow) {
+        await dispatchWorkflows(
+          ctx,
+          repoRow.id,
+          "issue_comment",
+          "issue",
+          issue.number,
+          payload.action
+        )
+      }
       break
     }
   }
+}
+
+async function dispatchWorkflows(
+  ctx: WebhookCtx,
+  repoId: string,
+  eventType: "pull_request" | "issues" | "issue_comment",
+  kind: "pr" | "issue",
+  number: number,
+  action: string | undefined
+): Promise<void> {
+  await runWorkflowsForEvent({
+    repoId,
+    installationId: ctx.installationId,
+    repoFullName: ctx.repoFullName,
+    triggers: workflowTriggersForEvent(eventType, action ?? ""),
+    username: ctx.senderLogin,
+    userId: ctx.senderId,
+    kind,
+    number,
+  }).catch((err) => log.error("workflow dispatch failed:", err))
 }
 
 async function recordRepoActivityEvent(
