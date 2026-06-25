@@ -25,6 +25,10 @@ import {
   installationPayloadSchema,
   installationReposPayloadSchema,
 } from "#/lib/github/webhook-schemas"
+import {
+  ISSUE_EVAL_ACTIONS,
+  PR_EVAL_ACTIONS,
+} from "#/constants/webhook-events"
 import { broadcastSignalKeys } from "@tripwire/github/signal-broker"
 import { createLogger } from "@tripwire/logger"
 
@@ -281,10 +285,10 @@ async function handleRepoEvent(
   switch (event) {
     case "pull_request": {
       const pr = payload.pull_request
-      if (
-        !pr ||
-        (payload.action !== "opened" && payload.action !== "reopened")
-      ) {
+      // Re-evaluate on new commits (synchronize), title/body edits, and
+      // draft→ready, not just first open — otherwise a flagged author can push
+      // past the initial check.
+      if (!pr || !PR_EVAL_ACTIONS.has(payload.action ?? "")) {
         break
       }
       await handlePullRequest(ctx, pr.number, pr.title, pr.body ?? undefined)
@@ -293,10 +297,7 @@ async function handleRepoEvent(
 
     case "issues": {
       const issue = payload.issue
-      if (
-        !issue ||
-        (payload.action !== "opened" && payload.action !== "reopened")
-      ) {
+      if (!issue || !ISSUE_EVAL_ACTIONS.has(payload.action ?? "")) {
         break
       }
       await handleIssue(ctx, issue.number, issue.title, issue.body ?? undefined)

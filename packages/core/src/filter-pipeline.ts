@@ -1,4 +1,4 @@
-import { and, eq, sql, asc, inArray } from "drizzle-orm"
+import { and, eq, sql, asc, inArray, isNull } from "drizzle-orm"
 import { db } from "@tripwire/db/client"
 import {
   events,
@@ -1312,6 +1312,37 @@ async function logPipelineEvents(
  * - "threshold" → treated as "block" (threshold counting is TODO)
  */
 
+/**
+ * True if we already took a GitHub enforcement action (close / delete / warn
+ * comment) on this exact content. Handler-logged action events carry no
+ * `pipelineId` (unlike the per-run `logPipelineEvents` outcome events), so this
+ * cleanly detects a real prior side effect — letting re-evaluations (PR
+ * synchronize / edit) refresh the events + Check Run without re-acting.
+ */
+async function hasPriorEnforcement(
+  repoId: string,
+  githubRef: string
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: events.id })
+    .from(events)
+    .where(
+      and(
+        eq(events.repoId, repoId),
+        eq(events.githubRef, githubRef),
+        isNull(events.pipelineId),
+        inArray(events.action, [
+          "pr_closed",
+          "issue_closed",
+          "comment_deleted",
+          "pipeline_warned",
+        ])
+      )
+    )
+    .limit(1)
+  return !!row
+}
+
 export async function handlePullRequest(
   ctx: WebhookContext,
   prNumber: number,
@@ -1337,6 +1368,10 @@ export async function handlePullRequest(
   const prefs = await loadPrefsForInstallation(ctx.installationId)
   // routeMode "silent" runs the pipeline + logs events but doesn't touch GitHub.
   if (prefs?.routeMode === "silent") return
+  // Re-evaluations (synchronize/edit) already refreshed the events above; don't
+  // re-close or re-comment if we've already acted on this PR.
+  if (result.repoId && (await hasPriorEnforcement(result.repoId, githubRef)))
+    return
   const token = await getInstallationToken(ctx.installationId)
 
   if (result.outcome === "blocked" || result.outcome === "blacklist_blocked") {
@@ -1428,6 +1463,9 @@ export async function handleIssue(
   const prefs = await loadPrefsForInstallation(ctx.installationId)
   // routeMode "silent" runs the pipeline + logs events but doesn't touch GitHub.
   if (prefs?.routeMode === "silent") return
+  // Re-evaluations (issue edit) refreshed events above; don't re-close/comment.
+  if (result.repoId && (await hasPriorEnforcement(result.repoId, githubRef)))
+    return
   const token = await getInstallationToken(ctx.installationId)
 
   if (result.outcome === "blocked" || result.outcome === "blacklist_blocked") {
